@@ -442,7 +442,7 @@ impl ChatView {
             }
             AgentEvent::PermissionAsk { .. } => {}
             AgentEvent::Queue { items, .. } => self.queue = items.clone(),
-            AgentEvent::CommandDone { .. } | AgentEvent::Finished { .. } => {}
+            AgentEvent::CommandDone { .. } | AgentEvent::Finished { .. } | AgentEvent::KbProgress { .. } => {}
             AgentEvent::State { running, .. } => {
                 if *running && !self.running {
                     self.run_start = Some(now);

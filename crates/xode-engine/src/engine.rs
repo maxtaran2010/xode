@@ -36,12 +36,15 @@ pub(crate) struct SessionRt {
 pub struct Engine {
     pub(crate) store: Arc<Store>,
     config: RwLock<Arc<Config>>,
-    events: broadcast::Sender<AgentEvent>,
+    pub(crate) events: broadcast::Sender<AgentEvent>,
     broker: Arc<PermissionBroker>,
     sessions: Mutex<HashMap<String, Arc<SessionRt>>>,
     indexes: Mutex<HashMap<String, Arc<ProjectIndex>>>,
     mcp: tokio::sync::Mutex<Option<(Vec<McpServer>, Arc<McpManager>)>>,
     mcp_status: Mutex<serde_json::Value>,
+    pub(crate) embed_hub: Arc<xode_kb::EmbedHub>,
+    pub(crate) kb_global: Mutex<Option<Arc<xode_kb::KbStore>>>,
+    pub(crate) kb_projects: Mutex<HashMap<String, Arc<xode_kb::KbStore>>>,
 }
 
 pub type UndoSet = (i64, Vec<(String, Option<Vec<u8>>)>);
@@ -54,9 +57,13 @@ impl Engine {
     pub fn new() -> Result<Arc<Engine>> {
         let store = Arc::new(Store::open_default()?);
         let (events, _) = broadcast::channel(8192);
+        let config = Config::load();
         let e = Arc::new(Engine {
             store,
-            config: RwLock::new(Arc::new(Config::load())),
+            embed_hub: xode_kb::EmbedHub::new(&config),
+            kb_global: Mutex::new(None),
+            kb_projects: Mutex::new(HashMap::new()),
+            config: RwLock::new(Arc::new(config)),
             events,
             broker: Arc::new(PermissionBroker::default()),
             sessions: Mutex::new(HashMap::new()),
@@ -104,12 +111,13 @@ impl Engine {
     pub fn config(&self) -> Config {
         (**self.config.read()).clone()
     }
-    fn config_arc(&self) -> Arc<Config> {
+    pub(crate) fn config_arc(&self) -> Arc<Config> {
         self.config.read().clone()
     }
     pub fn set_config(&self, cfg: Config) -> Result<()> {
         cfg.save()?;
         *self.config.write() = Arc::new(cfg);
+        self.kb_config_changed();
         Ok(())
     }
 
@@ -130,9 +138,10 @@ impl Engine {
     }
     pub fn remove_project(&self, id: &str) -> Result<()> {
         self.indexes.lock().remove(id);
+        self.kb_close_project(id);
         self.store.remove_project(id)
     }
-    fn project(&self, id: &str) -> Result<Project> {
+    pub(crate) fn project(&self, id: &str) -> Result<Project> {
         self.store.project(id)?.ok_or_else(|| anyhow!("project not found"))
     }
 
@@ -147,6 +156,9 @@ impl Engine {
         if let Some((g, m)) = cfg.active() {
             s.gateway = g.id;
             s.model = m;
+        }
+        if let Ok(p) = self.project(project_id) {
+            s.kb_off = self.kb_default_off(&p);
         }
         self.store.save_session(&s)?;
         let _ = self.store.touch_project(project_id);
@@ -177,6 +189,7 @@ impl Engine {
                 if let Ok(Some(s)) = self.store.session(session_id) {
                     st.segment = s.segment;
                     st.cwd = s.cwd.as_ref().map(PathBuf::from).filter(|p| p.is_dir());
+                    st.kb_off = s.kb_off.clone();
                     if let Some(t) = self.store_touched(session_id) {
                         st.touched = t;
                     }
@@ -298,7 +311,11 @@ impl Engine {
         let project = self.project(&sess.project_id)?;
         let (gw, model) = self.resolve_model(&cfg, &sess)?;
         let index = self.index(&project);
-        let tools = self.registry(&cfg, index.as_ref()).await;
+        let mut tools = self.registry(&cfg, index.as_ref()).await;
+        let (cfg, kb_tool) = self.kb_runtime(&cfg, &project, &sess);
+        if let Some(t) = kb_tool {
+            tools.add(t);
+        }
         let rt = self.srt(session_id);
         let cancel = rt.cancel.lock().clone().unwrap_or_default();
         Ok(Runtime {
@@ -321,6 +338,28 @@ impl Engine {
             user_stopped: rt.user_stopped.clone(),
             queue: rt.queue.clone(),
         })
+    }
+
+    /// The `kb` tool (when anything is enabled for this chat) and the config with the KB
+    /// line appended to the system prompt.
+    fn kb_runtime(&self, cfg: &Arc<Config>, project: &Project, sess: &SessionInfo) -> (Arc<Config>, Option<xode_core::tool::ToolRef>) {
+        if !cfg.knowledge.enabled || !cfg.tools.is_enabled("kb") {
+            return (cfg.clone(), None);
+        }
+        let kb = self.kb_for(project);
+        let sel = xode_kb::Sel::new(&sess.kb_off);
+        if !kb.any_enabled(&sel) {
+            return (cfg.clone(), None);
+        }
+        let mut c = (**cfg).clone();
+        if let Some(line) = kb.prompt_line(&sel) {
+            c.system_prompt_extra = if c.system_prompt_extra.trim().is_empty() {
+                line
+            } else {
+                format!("{line}\n\n{}", c.system_prompt_extra.trim())
+            };
+        }
+        (Arc::new(c), Some(xode_kb::kb_tool(kb)))
     }
 
     fn resolve_model(&self, cfg: &Config, sess: &SessionInfo) -> Result<(Gateway, String)> {
@@ -684,6 +723,10 @@ impl Engine {
             }
         }
         reg.tools.retain(|t| cfg.tools.is_enabled(t.name()));
+        let (cfg, kb_tool) = self.kb_runtime(&cfg, &project, &sess);
+        if let Some(t) = kb_tool {
+            reg.add(t);
+        }
         let specs = reg.specs();
 
         let r = Runtime {

@@ -113,10 +113,21 @@ pub fn search(kb: &Kb, sel: &Sel, q: &str, opts: &SearchOpts) -> Vec<Hit> {
     let ts = terms(q);
     // Query vector, if an embedder is loaded (or loadable) and any store has vectors.
     let want_vec = !opts.text_only && kb.stores().any(|s| s.bits.read().len() > 0);
+    // Never block a search on loading/downloading a model: load it in the background and
+    // search text-only until it is ready.
     let qv = want_vec
         .then(|| kb.stores().next().map(|s| s.hub.clone()))
         .flatten()
-        .and_then(|h| h.get())
+        .and_then(|h| {
+            h.loaded().or_else(|| {
+                if h.status().state != "loading" {
+                    std::thread::spawn(move || {
+                        h.get();
+                    });
+                }
+                None
+            })
+        })
         .and_then(|e| e.embed(&[q.to_string()], true).ok())
         .and_then(|mut v| v.pop());
 

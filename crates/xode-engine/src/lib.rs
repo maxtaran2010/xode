@@ -17,10 +17,17 @@
 //!   `scan_gateways(extra_hosts: Vec<String>) -> Vec<Gateway>`, `refresh_models(gateway_id)`
 //! - fs: `list_dir(path) -> Vec<FileEntry>`, `complete_path(project_id, prefix) -> Vec<String>`
 //! - `browser_test() -> GatewayTest`, `mcp_test(McpServer) -> Result<Vec<String>>`
+//! - knowledge base: `kb_overview(project_id)`, `kb_add_source(project_id, layer, path, name)`,
+//!   `kb_remove_source`, `kb_update_source`, `kb_reindex`, `kb_search(project_id, KbSearchReq)`,
+//!   `kb_note`, `kb_list`, `kb_save_note`, `kb_create_note`, `kb_delete_note`, `kb_graph`,
+//!   `kb_titles`, `kb_embed_retry()`, `set_session_kb(session_id, off)`
 pub mod api;
 mod commands;
 mod engine;
+mod kb;
 
 pub use api::*;
 pub use engine::Engine;
+pub use kb::{KbFolder, KbNoteRow, KbOverview, KbSearchReq};
+pub use xode_kb;
 pub use xode_core;

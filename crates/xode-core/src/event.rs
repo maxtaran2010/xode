@@ -61,6 +61,10 @@ pub enum AgentEvent {
     Finished { session: String, stopped: bool, error: bool },
     Notice { session: String, text: String },
     Error { session: String, text: String },
+    /// Knowledge-base indexing progress (not tied to a session: `session` is empty).
+    /// `source` is a source key (`g:1`) or a store prefix (`g`/`p`) for embedding;
+    /// `stage`: scan | index | embed | idle.
+    KbProgress { session: String, source: String, stage: String, done: u64, total: u64 },
 }
 
 impl AgentEvent {
@@ -86,7 +90,8 @@ impl AgentEvent {
             | CommandDone { session, .. }
             | Finished { session, .. }
             | Notice { session, .. }
-            | Error { session, .. } => session,
+            | Error { session, .. }
+            | KbProgress { session, .. } => session,
         }
     }
 }

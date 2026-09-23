@@ -13,7 +13,7 @@
 pub mod embed;
 pub mod md;
 mod search;
-mod store;
+pub mod store;
 mod tool;
 
 pub use embed::{EmbedHub, Embedder};

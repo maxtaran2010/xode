@@ -309,6 +309,29 @@ impl KbStore {
         self.poke();
     }
 
+    pub fn config(&self) -> Knowledge {
+        self.cfg.read().clone()
+    }
+
+    /// Links that did not resolve inside this store: (source note id, target key).
+    pub fn dangling_links(&self, sources: &[i64], limit: usize) -> Vec<(String, String)> {
+        if sources.is_empty() {
+            return vec![];
+        }
+        let ids = sources.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(",");
+        self.conn
+            .lock()
+            .query_map(
+                &format!(
+                    "SELECT l.src, l.target FROM links l JOIN notes n ON n.id = l.src
+                     WHERE l.dst IS NULL AND n.source IN ({ids}) LIMIT {limit}"
+                ),
+                (),
+                |r| Ok((self.key(r.get(0)?), r.get(1)?)),
+            )
+            .unwrap_or_default()
+    }
+
     /// Bumped whenever notes change (graph caches, UI refresh).
     pub fn generation(&self) -> u64 {
         self.generation.load(Ordering::SeqCst)

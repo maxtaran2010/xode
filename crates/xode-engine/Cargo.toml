@@ -8,6 +8,7 @@ xode-core.workspace = true
 xode-tools.workspace = true
 xode-index = { path = "../xode-index" }
 xode-net = { path = "../xode-net" }
+xode-kb = { path = "../xode-kb" }
 tokio.workspace = true
 tokio-util.workspace = true
 futures.workspace = true
