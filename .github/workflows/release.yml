@@ -77,7 +77,12 @@ jobs:
         shell: bash
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri build --target ${{ matrix.target }} -- ${{ matrix.desktop_flags }}
+          FLAGS="${{ matrix.desktop_flags }}"
+          if [ -n "$FLAGS" ]; then
+            pnpm tauri build --target ${{ matrix.target }} -- $FLAGS
+          else
+            pnpm tauri build --target ${{ matrix.target }}
+          fi
 
       - name: Package
         id: pkg

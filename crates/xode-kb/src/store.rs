@@ -18,7 +18,7 @@ use std::time::{Duration, UNIX_EPOCH};
 use xode_core::config::Knowledge;
 use xode_db::{params, Connection, OptionalExt};
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
 const SKIP_DIRS: &[&str] = &[".git", "node_modules", "target", ".obsidian", ".trash", "__pycache__", ".venv", ".xode"];
 
@@ -835,7 +835,7 @@ impl KbStore {
     fn resolve_links(&self) -> Result<()> {
         let c = self.conn.lock();
         let pending: Vec<(i64, String)> =
-            c.query_map("SELECT rowid, target FROM links WHERE dst IS NULL", (), |r| Ok((r.get(0)?, r.get(1)?)))?;
+            c.query_map("SELECT id, target FROM links WHERE dst IS NULL", (), |r| Ok((r.get(0)?, r.get(1)?)))?;
         if pending.is_empty() {
             return Ok(());
         }
@@ -850,7 +850,7 @@ impl KbStore {
         c.transaction(|c| {
             for (rid, t) in pending {
                 if let Some(d) = keys.get(&t) {
-                    c.execute("UPDATE links SET dst=?2 WHERE rowid=?1", params![rid, *d])?;
+                    c.execute("UPDATE links SET dst=?2 WHERE id=?1", params![rid, *d])?;
                 }
             }
             Ok(())
@@ -1309,7 +1309,7 @@ fn init_db(c: &Connection) -> Result<()> {
              ord INTEGER NOT NULL, heading TEXT NOT NULL DEFAULT '', line_start INTEGER, line_end INTEGER,
              tokens INTEGER, text TEXT NOT NULL, emb BLOB, bits BLOB);
          CREATE INDEX IF NOT EXISTS chunks_note ON chunks(note);
-         CREATE TABLE IF NOT EXISTS links(src INTEGER NOT NULL, target TEXT NOT NULL, dst INTEGER);
+         CREATE TABLE IF NOT EXISTS links(id INTEGER PRIMARY KEY, src INTEGER NOT NULL, target TEXT NOT NULL, dst INTEGER);
          CREATE INDEX IF NOT EXISTS links_src ON links(src);
          CREATE INDEX IF NOT EXISTS links_dst ON links(dst);
          CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);",
