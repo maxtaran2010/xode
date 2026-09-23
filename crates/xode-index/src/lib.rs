@@ -11,7 +11,7 @@ use anyhow::Context;
 use notify_debouncer_mini::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_mini::{new_debouncer, DebounceEventResult, Debouncer};
 use parking_lot::Mutex;
-use rusqlite::{params, Connection, OptionalExtension};
+use xode_db::{params, Connection, OptionalExt};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Component, Path, PathBuf};
@@ -20,7 +20,7 @@ use std::sync::{Arc, Weak};
 use std::time::{Duration, UNIX_EPOCH};
 use xode_core::tool::{hash_bytes, Outliner};
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 const SKIP_DIRS: &[&str] = &[
     ".git", "node_modules", "target", "dist", "build", ".xode", "__pycache__", ".venv", "venv", "out", "bin", "obj",
     ".next", ".idea", ".vs", ".vscode", "vendor", "coverage",
@@ -92,8 +92,23 @@ impl ProjectIndex {
     pub fn open(root: &Path, cfg: &xode_core::config::Tools) -> anyhow::Result<Arc<ProjectIndex>> {
         let dir = root.join(".xode");
         std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
-        let conn = Connection::open(dir.join("index.db"))?;
-        Self::init_db(&conn)?;
+        let db = dir.join("index.db");
+        // The index is derived data: an unreadable file (older format, corruption) is rebuilt.
+        let conn = match Connection::open_shared(&db) {
+            Err(e) if !e.is_locked() => {
+                tracing::warn!("index db unreadable, rebuilding: {e}");
+                for ext in ["", "-wal", "-shm"] {
+                    let _ = std::fs::remove_file(dir.join(format!("index.db{ext}")));
+                }
+                Connection::open_shared(&db)?
+            }
+            r => r?,
+        };
+        // Another Xode process owns the file: query it read-only, it keeps it fresh.
+        let owner = !conn.is_read_only();
+        if owner {
+            Self::init_db(&conn)?;
+        }
         let idx = Arc::new(ProjectIndex {
             root: root.to_path_buf(),
             root_canon: std::fs::canonicalize(root).ok(),
@@ -104,7 +119,7 @@ impl ProjectIndex {
             graph: Mutex::new(None),
             watcher: Mutex::new(None),
         });
-        if cfg.index_enabled {
+        if cfg.index_enabled && owner {
             let bg = idx.clone();
             std::thread::Builder::new()
                 .name("xode-index".into())
@@ -126,11 +141,7 @@ impl ProjectIndex {
     }
 
     fn init_db(conn: &Connection) -> anyhow::Result<()> {
-        conn.busy_timeout(Duration::from_secs(5))?;
-        let _ = conn.pragma_update(None, "journal_mode", "WAL");
-        let _ = conn.pragma_update(None, "synchronous", "NORMAL");
-        let v: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        if v != SCHEMA_VERSION {
+        if conn.user_version() != SCHEMA_VERSION {
             conn.execute_batch("DROP TABLE IF EXISTS files; DROP TABLE IF EXISTS symbols; DROP TABLE IF EXISTS refs;")?;
         }
         conn.execute_batch(
@@ -138,12 +149,12 @@ impl ProjectIndex {
              CREATE TABLE IF NOT EXISTS symbols(file TEXT, name TEXT COLLATE NOCASE, kind TEXT, parent TEXT, depth INTEGER,
                  line_start INTEGER, line_end INTEGER, signature TEXT);
              CREATE TABLE IF NOT EXISTS refs(name TEXT NOT NULL, file TEXT NOT NULL, n INTEGER, lines TEXT,
-                 PRIMARY KEY(name, file)) WITHOUT ROWID;
+                 PRIMARY KEY(name, file));
              CREATE INDEX IF NOT EXISTS symbols_name ON symbols(name);
              CREATE INDEX IF NOT EXISTS symbols_file ON symbols(file);
              CREATE INDEX IF NOT EXISTS refs_file ON refs(file);",
         )?;
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        conn.set_user_version(SCHEMA_VERSION)?;
         Ok(())
     }
 
@@ -199,9 +210,9 @@ impl ProjectIndex {
     fn full_scan(&self) -> anyhow::Result<()> {
         let known: HashMap<String, (i64, i64, String)> = {
             let c = self.conn.lock();
-            let mut st = c.prepare("SELECT path, mtime, size, hash FROM files")?;
-            let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, (r.get(1)?, r.get(2)?, r.get(3)?))))?;
-            rows.filter_map(Result::ok).collect()
+            c.query_map("SELECT path, mtime, size, hash FROM files", (), |r| Ok((r.get::<String>(0)?, (r.get(1)?, r.get(2)?, r.get(3)?))))?
+                .into_iter()
+                .collect()
         };
         let mut seen: HashSet<String> = HashSet::new();
         let walker = ignore::WalkBuilder::new(&self.root)
@@ -286,15 +297,15 @@ impl ProjectIndex {
             self.write_batch(batch, known_ref)?;
             Ok(())
         })?;
-        let mut c = self.conn.lock();
-        let tx = c.transaction()?;
-        for (rel, m) in touch_only {
-            tx.execute("UPDATE files SET mtime=?2, size=?3 WHERE path=?1", params![rel, m.mtime, m.size])?;
-        }
-        for rel in known.keys().filter(|k| !seen.contains(*k)) {
-            Self::delete_rows(&tx, rel)?;
-        }
-        tx.commit()?;
+        self.conn.lock().transaction(|tx| {
+            for (rel, m) in touch_only {
+                tx.execute("UPDATE files SET mtime=?2, size=?3 WHERE path=?1", params![rel, m.mtime, m.size])?;
+            }
+            for rel in known.keys().filter(|k| !seen.contains(*k)) {
+                Self::delete_rows(tx, rel)?;
+            }
+            Ok(())
+        })?;
         self.bump();
         Ok(())
     }
@@ -311,51 +322,50 @@ impl ProjectIndex {
         if batch.is_empty() {
             return Ok(());
         }
-        let mut c = self.conn.lock();
-        let tx = c.transaction()?;
-        for (rel, meta, hash, lang, parsed) in batch {
-            // Skip if someone (watcher / file_changed) updated the row since our snapshot.
-            let cur: Option<(i64, i64)> = tx
-                .query_row("SELECT mtime, size FROM files WHERE path=?1", [&rel], |r| Ok((r.get(0)?, r.get(1)?)))
-                .optional()?;
-            let snap = known.get(&rel).map(|k| (k.0, k.1));
-            if cur != snap {
-                continue;
+        self.conn.lock().transaction(|tx| {
+            for (rel, meta, hash, lang, parsed) in batch {
+                // Skip if someone (watcher / file_changed) updated the row since our snapshot.
+                let cur: Option<(i64, i64)> = tx
+                    .query_row("SELECT mtime, size FROM files WHERE path=?1", params![rel], |r| Ok((r.get(0)?, r.get(1)?)))
+                    .optional()?;
+                let snap = known.get(&rel).map(|k| (k.0, k.1));
+                if cur != snap {
+                    continue;
+                }
+                Self::store(tx, &rel, &meta, &hash, lang, &parsed)?;
             }
-            Self::store(&tx, &rel, &meta, &hash, lang, &parsed)?;
-        }
-        tx.commit()?;
+            Ok(())
+        })?;
         self.bump();
         Ok(())
     }
 
-    fn delete_rows(c: &Connection, rel: &str) -> rusqlite::Result<()> {
-        c.execute("DELETE FROM files WHERE path=?1", [rel])?;
-        c.execute("DELETE FROM symbols WHERE file=?1", [rel])?;
-        c.execute("DELETE FROM refs WHERE file=?1", [rel])?;
+    fn delete_rows(c: &Connection, rel: &str) -> xode_db::Result<()> {
+        c.execute("DELETE FROM files WHERE path=?1", params![rel])?;
+        c.execute("DELETE FROM symbols WHERE file=?1", params![rel])?;
+        c.execute("DELETE FROM refs WHERE file=?1", params![rel])?;
         Ok(())
     }
 
-    fn store(c: &Connection, rel: &str, meta: &FileMeta, hash: &str, lang: Lang, p: &Parsed) -> rusqlite::Result<()> {
+    fn store(c: &Connection, rel: &str, meta: &FileMeta, hash: &str, lang: Lang, p: &Parsed) -> xode_db::Result<()> {
         Self::delete_rows(c, rel)?;
         c.execute(
             "INSERT INTO files(path, mtime, size, hash, lang) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![rel, meta.mtime, meta.size, hash, lang.name()],
         )?;
-        let mut st = c.prepare_cached(
-            "INSERT INTO symbols(file, name, kind, parent, depth, line_start, line_end, signature) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        )?;
         for s in &p.syms {
-            st.execute(params![rel, s.name, s.kind, s.parent, s.depth, s.line_start, s.line_end, s.signature])?;
+            c.execute(
+                "INSERT INTO symbols(file, name, kind, parent, depth, line_start, line_end, signature) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![rel, s.name, s.kind, s.parent, s.depth, s.line_start, s.line_end, s.signature],
+            )?;
         }
         let mut agg: HashMap<&str, Vec<u32>> = HashMap::new();
         for (n, l) in &p.refs {
             agg.entry(n.as_str()).or_default().push(*l);
         }
-        let mut st = c.prepare_cached("INSERT OR REPLACE INTO refs(name, file, n, lines) VALUES (?1,?2,?3,?4)")?;
         for (n, ls) in agg {
             let lines = ls.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(",");
-            st.execute(params![n, rel, ls.len() as i64, lines])?;
+            c.execute("INSERT OR REPLACE INTO refs(name, file, n, lines) VALUES (?1,?2,?3,?4)", params![n, rel, ls.len() as i64, lines])?;
         }
         Ok(())
     }
@@ -370,9 +380,9 @@ impl ProjectIndex {
             let _ = Self::delete_rows(&c, rel);
             // A deleted directory: drop everything below it.
             let like = format!("{}/%", rel.replace('%', "\\%").replace('_', "\\_"));
-            let _ = c.execute("DELETE FROM symbols WHERE file LIKE ?1 ESCAPE '\\'", [&like]);
-            let _ = c.execute("DELETE FROM refs WHERE file LIKE ?1 ESCAPE '\\'", [&like]);
-            let _ = c.execute("DELETE FROM files WHERE path LIKE ?1 ESCAPE '\\'", [&like]);
+            let _ = c.execute("DELETE FROM symbols WHERE file LIKE ?1 ESCAPE '\\'", params![like]);
+            let _ = c.execute("DELETE FROM refs WHERE file LIKE ?1 ESCAPE '\\'", params![like]);
+            let _ = c.execute("DELETE FROM files WHERE path LIKE ?1 ESCAPE '\\'", params![like]);
             drop(c);
             self.bump();
             return false;
@@ -380,7 +390,7 @@ impl ProjectIndex {
         let prev: Option<(i64, i64, String)> = self
             .conn
             .lock()
-            .query_row("SELECT mtime, size, hash FROM files WHERE path=?1", [rel], |r| {
+            .query_row("SELECT mtime, size, hash FROM files WHERE path=?1", params![rel], |r| {
                 Ok((r.get(0)?, r.get(1)?, r.get(2)?))
             })
             .optional()
@@ -410,13 +420,7 @@ impl ProjectIndex {
             return true;
         }
         let parsed = parse::parse(lang, &String::from_utf8_lossy(&bytes));
-        let mut c = self.conn.lock();
-        let r = (|| -> rusqlite::Result<()> {
-            let tx = c.transaction()?;
-            Self::store(&tx, rel, &meta, &hash, lang, &parsed)?;
-            tx.commit()
-        })();
-        drop(c);
+        let r = self.conn.lock().transaction(|tx| Self::store(tx, rel, &meta, &hash, lang, &parsed));
         self.bump();
         r.is_ok()
     }
@@ -476,12 +480,12 @@ impl ProjectIndex {
 
     pub fn stats(&self) -> IndexStats {
         let c = self.conn.lock();
-        let files: i64 = c.query_row("SELECT COUNT(*) FROM files", [], |r| r.get(0)).unwrap_or(0);
-        let symbols: i64 = c.query_row("SELECT COUNT(*) FROM symbols", [], |r| r.get(0)).unwrap_or(0);
+        let files: i64 = c.scalar("SELECT COUNT(*) FROM files", ()).ok().flatten().unwrap_or(0);
+        let symbols: i64 = c.scalar("SELECT COUNT(*) FROM symbols", ()).ok().flatten().unwrap_or(0);
         IndexStats { files: files as u64, symbols: symbols as u64, ready: self.is_ready() }
     }
 
-    fn row(r: &rusqlite::Row) -> rusqlite::Result<SymRow> {
+    fn row(r: &xode_db::Row) -> xode_db::Result<SymRow> {
         Ok(SymRow {
             file: r.get(0)?,
             name: r.get(1)?,
@@ -496,13 +500,14 @@ impl ProjectIndex {
 
     /// Symbols of an indexed file, in line order.
     pub fn file_symbols(&self, rel: &str) -> Vec<SymRow> {
-        let c = self.conn.lock();
-        let Ok(mut st) = c.prepare_cached(
-            "SELECT file,name,kind,parent,depth,line_start,line_end,signature FROM symbols WHERE file=?1 ORDER BY line_start, depth",
-        ) else {
-            return vec![];
-        };
-        st.query_map([rel], Self::row).map(|r| r.filter_map(Result::ok).collect()).unwrap_or_default()
+        self.conn
+            .lock()
+            .query_map(
+                "SELECT file,name,kind,parent,depth,line_start,line_end,signature FROM symbols WHERE file=?1 ORDER BY line_start, depth",
+                params![rel],
+                Self::row,
+            )
+            .unwrap_or_default()
     }
 
     /// Definitions whose name matches `q`: exact (case-sensitive) first, then case-insensitive
@@ -513,31 +518,31 @@ impl ProjectIndex {
             return vec![];
         }
         let esc = q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
-        let c = self.conn.lock();
-        let Ok(mut st) = c.prepare_cached(
-            "SELECT file,name,kind,parent,depth,line_start,line_end,signature FROM symbols
+        self.conn
+            .lock()
+            .query_map(
+                "SELECT file,name,kind,parent,depth,line_start,line_end,signature FROM symbols
              WHERE name LIKE ?2 ESCAPE '\\'
              ORDER BY (name = ?1 COLLATE BINARY) DESC, (name = ?1) DESC, (name LIKE ?3 ESCAPE '\\') DESC,
                       length(name), depth, file, line_start LIMIT ?4",
-        ) else {
-            return vec![];
-        };
-        st.query_map(params![q, format!("%{esc}%"), format!("{esc}%"), limit as i64], Self::row)
-            .map(|r| r.filter_map(Result::ok).collect())
+                params![q, format!("%{esc}%"), format!("{esc}%"), limit as i64],
+                Self::row,
+            )
             .unwrap_or_default()
     }
 
     /// Exact-name definitions (case-insensitive), optionally filtered by parent.
     pub fn defs(&self, name: &str, parent: Option<&str>) -> Vec<SymRow> {
-        let c = self.conn.lock();
-        let Ok(mut st) = c.prepare_cached(
-            "SELECT file,name,kind,parent,depth,line_start,line_end,signature FROM symbols WHERE name = ?1
+        let rows: Vec<SymRow> = self
+            .conn
+            .lock()
+            .query_map(
+                "SELECT file,name,kind,parent,depth,line_start,line_end,signature FROM symbols WHERE name = ?1
              ORDER BY (name = ?1 COLLATE BINARY) DESC, file, line_start LIMIT 200",
-        ) else {
-            return vec![];
-        };
-        let rows: Vec<SymRow> =
-            st.query_map([name], Self::row).map(|r| r.filter_map(Result::ok).collect()).unwrap_or_default();
+                params![name],
+                Self::row,
+            )
+            .unwrap_or_default();
         match parent {
             Some(p) => rows.into_iter().filter(|r| r.parent.as_deref().map(|x| x.eq_ignore_ascii_case(p)).unwrap_or(false)).collect(),
             None => rows,
@@ -548,9 +553,7 @@ impl ProjectIndex {
     pub fn refs(&self, name: &str) -> Vec<(String, u32)> {
         let c = self.conn.lock();
         let q = |sql: &str| -> Vec<(String, String)> {
-            c.prepare_cached(sql)
-                .and_then(|mut st| st.query_map([name], |r| Ok((r.get(0)?, r.get(1)?))).map(|r| r.filter_map(Result::ok).collect()))
-                .unwrap_or_default()
+            c.query_map(sql, params![name], |r| Ok((r.get(0)?, r.get(1)?))).unwrap_or_default()
         };
         let mut v = q("SELECT file, lines FROM refs WHERE name = ?1 ORDER BY file");
         if v.is_empty() {
@@ -574,8 +577,7 @@ impl ProjectIndex {
         } else {
             format!("{}/%", dir.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"))
         };
-        c.prepare_cached("SELECT path FROM files WHERE path LIKE ?1 ESCAPE '\\' ORDER BY path")
-            .and_then(|mut st| st.query_map([like], |r| r.get(0)).map(|r| r.filter_map(Result::ok).collect()))
+        c.query_map("SELECT path FROM files WHERE path LIKE ?1 ESCAPE '\\' ORDER BY path", params![like], |r| r.get(0))
             .unwrap_or_default()
     }
 
@@ -583,12 +585,11 @@ impl ProjectIndex {
     pub fn symbol_names(&self, prefix: &str, limit: usize) -> Vec<String> {
         let esc = prefix.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
         let c = self.conn.lock();
-        c.prepare_cached(
+        c.query_map(
             "SELECT name FROM symbols WHERE name LIKE ?1 ESCAPE '\\' GROUP BY name ORDER BY length(name), name LIMIT ?2",
+            params![format!("{esc}%"), limit as i64],
+            |r| r.get(0),
         )
-        .and_then(|mut st| {
-            st.query_map(params![format!("{esc}%"), limit as i64], |r| r.get(0)).map(|r| r.filter_map(Result::ok).collect())
-        })
         .unwrap_or_default()
     }
 
@@ -597,17 +598,12 @@ impl ProjectIndex {
         let p = prefix.replace('\\', "/");
         let esc = p.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
         let c = self.conn.lock();
-        c.prepare_cached(
+        c.query_map(
             "SELECT path FROM files WHERE path LIKE ?1 ESCAPE '\\'
              ORDER BY (path LIKE ?2 ESCAPE '\\') DESC, (path LIKE ?3 ESCAPE '\\') DESC, length(path), path LIMIT ?4",
+            params![format!("%{esc}%"), format!("{esc}%"), format!("%/{esc}%"), limit as i64],
+            |r| r.get(0),
         )
-        .and_then(|mut st| {
-            st.query_map(
-                params![format!("%{esc}%"), format!("{esc}%"), format!("%/{esc}%"), limit as i64],
-                |r| r.get(0),
-            )
-            .map(|r| r.filter_map(Result::ok).collect())
-        })
         .unwrap_or_default()
     }
 
@@ -694,51 +690,44 @@ impl ProjectIndex {
         let c = self.conn.lock();
         // name -> defining file ids
         let mut defs: HashMap<String, Vec<u32>> = HashMap::new();
-        if let Ok(mut st) = c.prepare("SELECT file, name FROM symbols") {
-            let _ = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).map(|rows| {
-                for (f, n) in rows.flatten() {
-                    let fid = g.file_id(&f);
-                    let v = defs.entry(n).or_default();
-                    if !v.contains(&fid) {
-                        v.push(fid);
-                    }
-                }
-            });
-        }
-        g.with_syms = g.files.len();
-        if let Ok(mut st) = c.prepare("SELECT name, file, n FROM refs") {
-            if let Ok(mut rows) = st.query([]) {
-                while let Ok(Some(r)) = rows.next() {
-                    let Ok(name) = r.get_ref(0).and_then(|v| v.as_str().map_err(Into::into)) else { continue };
-                    let Some(dsts) = defs.get(name) else { continue };
-                    if dsts.len() > 20 {
-                        continue;
-                    }
-                    let Ok(file) = r.get_ref(1).and_then(|v| v.as_str().map_err(Into::into)) else { continue };
-                    let cnt: i64 = r.get(2).unwrap_or(1);
-                    let nd = dsts.len() as f32;
-                    let mut w = (cnt as f32).sqrt() / nd;
-                    if name.len() < 3 || name.starts_with('_') {
-                        w *= 0.1;
-                    } else if name.bytes().all(|b| b.is_ascii_lowercase()) {
-                        // Single lowercase words (set, take, insert…) are often calls on std types.
-                        w *= 0.25;
-                    } else if name.len() >= 8
-                        && (name.contains('_') || name.bytes().skip(1).any(|b| b.is_ascii_uppercase()))
-                    {
-                        w *= 2.0;
-                    }
-                    let dsts = dsts.clone();
-                    let src = g.file_id(file);
-                    let nid = g.name_id(name);
-                    for d in dsts {
-                        if d != src {
-                            g.edges.push((src, d, nid, w));
-                        }
-                    }
+        let _ = c.for_each("SELECT file, name FROM symbols", (), |r| {
+            if let (Ok(f), Ok(n)) = (r.get::<String>(0), r.get::<String>(1)) {
+                let fid = g.file_id(&f);
+                let v = defs.entry(n).or_default();
+                if !v.contains(&fid) {
+                    v.push(fid);
                 }
             }
-        }
+            true
+        });
+        g.with_syms = g.files.len();
+        let _ = c.for_each("SELECT name, file, n FROM refs", (), |r| {
+            let (Ok(name), Ok(file)) = (r.get::<String>(0), r.get::<String>(1)) else { return true };
+            let Some(dsts) = defs.get(&name) else { return true };
+            if dsts.len() > 20 {
+                return true;
+            }
+            let cnt: i64 = r.get(2).unwrap_or(1);
+            let nd = dsts.len() as f32;
+            let mut w = (cnt as f32).sqrt() / nd;
+            if name.len() < 3 || name.starts_with('_') {
+                w *= 0.1;
+            } else if name.bytes().all(|b| b.is_ascii_lowercase()) {
+                // Single lowercase words (set, take, insert…) are often calls on std types.
+                w *= 0.25;
+            } else if name.len() >= 8 && (name.contains('_') || name.bytes().skip(1).any(|b| b.is_ascii_uppercase())) {
+                w *= 2.0;
+            }
+            let dsts = dsts.clone();
+            let src = g.file_id(&file);
+            let nid = g.name_id(&name);
+            for d in dsts {
+                if d != src {
+                    g.edges.push((src, d, nid, w));
+                }
+            }
+            true
+        });
         g
     }
 

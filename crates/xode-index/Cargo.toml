@@ -12,7 +12,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 parking_lot.workspace = true
 tracing.workspace = true
-rusqlite.workspace = true
+xode-db = { path = "../xode-db" }
 regex.workspace = true
 once_cell.workspace = true
 sha2.workspace = true

@@ -8313,7 +8313,6 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "regex",
- "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -8332,6 +8331,7 @@ dependencies = [
  "tree-sitter-rust",
  "tree-sitter-typescript",
  "xode-core",
+ "xode-db",
 ]
 
 [[package]]
