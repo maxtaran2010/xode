@@ -1,0 +1,7 @@
+target/
+node_modules/
+apps/desktop/dist/
+.xode/
+*.log
+.DS_Store
+apps/desktop/src-tauri/gen/schemas/

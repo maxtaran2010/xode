@@ -1,0 +1,408 @@
+/* ---------- tokens (overridden live from config.theme, see lib/theme.ts) */
+:root {
+  --bg: #13161c;
+  --surface: rgba(19, 22, 28, 0.97);
+  --panel: rgba(27, 31, 40, 0.86);
+  --panel-solid: #1a1e27;
+  --elev: #222734;
+  --hover: rgba(255, 255, 255, 0.05);
+  --active: rgba(90, 140, 255, 0.14);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: #e6e9ef;
+  --text-2: #aab2c0;
+  --muted: #7d8595;
+  --accent: #4a8dff;
+  --accent-2: #7aa7ff;
+  --ok: #3fb68b;
+  --warn: #e0a84a;
+  --err: #e5604f;
+  --think: #9aa6c7;
+
+  --font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", Inter, system-ui, -apple-system, sans-serif;
+  --mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+  --font-size: 14px;
+  --r-sm: 6px;
+  --r: 8px;
+  --r-lg: 12px;
+  --tb: 44px;
+  --ease: 120ms ease;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.38), 0 2px 6px rgba(0, 0, 0, 0.22);
+  color-scheme: dark;
+}
+
+:root[data-scheme="light"] {
+  --border-strong: rgba(20, 30, 50, 0.16);
+  --shadow: 0 12px 32px rgba(20, 30, 50, 0.16), 0 2px 6px rgba(20, 30, 50, 0.08);
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--font-size);
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+:root[data-backdrop="on"] body {
+  background: transparent;
+}
+
+body.resizing {
+  cursor: col-resize;
+}
+body.resizing * {
+  pointer-events: none !important;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+pre,
+code,
+.mono,
+.input.mono {
+  font-variant-ligatures: none;
+}
+.mono {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 12px;
+}
+.spacer {
+  flex: 1;
+}
+.err-text {
+  color: var(--err);
+}
+
+/* ---------- scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+:root[data-scheme="light"] ::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.14);
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------- icon buttons */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  color: var(--muted);
+  transition: background var(--ease), color var(--ease);
+  flex: none;
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+.icon-btn.on {
+  color: var(--text-2);
+}
+.icon-btn.xs {
+  width: 24px;
+  height: 24px;
+}
+.icon-btn.danger:hover {
+  color: var(--err);
+}
+
+/* ---------- text buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--r-sm);
+  background: var(--elev);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background var(--ease), border-color var(--ease);
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--elev) 80%, white 6%);
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+.btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, white);
+}
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-2);
+}
+.btn.ghost:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: transparent;
+}
+.btn.on {
+  border-color: var(--border-strong);
+}
+.btn.sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+/* ---------- segmented */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--r-sm);
+  background: var(--hover);
+}
+.seg button {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 12.5px;
+  transition: background var(--ease), color var(--ease);
+}
+.seg button:hover {
+  color: var(--text);
+}
+.seg button.on {
+  background: var(--elev);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.seg-sm button {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+/* ---------- menu */
+.menu {
+  position: fixed;
+  z-index: 1000;
+  padding: 5px;
+  background: var(--panel-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-height: 70vh;
+  overflow-y: auto;
+  font-size: 13px;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: var(--r-sm);
+  color: var(--text);
+}
+.menu-item:hover:not(:disabled) {
+  background: var(--hover);
+}
+.menu-item.danger {
+  color: var(--err);
+}
+.menu-icon {
+  display: inline-flex;
+  width: 16px;
+  color: var(--muted);
+  flex: none;
+}
+.menu-item.danger .menu-icon {
+  color: inherit;
+}
+.menu-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.menu-hint {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.menu-check {
+  display: inline-flex;
+  width: 14px;
+  color: var(--accent-2);
+}
+.menu-header {
+  padding: 8px 8px 4px;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+/* ---------- tooltip */
+[data-tip] {
+  position: relative;
+}
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--elev);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--font);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 50;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- motion */
+.shimmer {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 40%, var(--text) 50%, var(--muted) 60%, var(--muted) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+  animation: shimmer 2.2s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.chev {
+  transition: transform var(--ease);
+  flex: none;
+}
+.thinking.open .chev,
+.divider-wrap.open .chev,
+.gw.open > .gw-head .chev,
+.seg-item.open .chev,
+.ft-chev.open {
+  transform: rotate(90deg);
+}
+
+/* ---------- badges / status */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--active);
+  color: var(--accent-2);
+  font-size: 11px;
+  flex: none;
+}
+.badge.subtle {
+  background: var(--hover);
+  color: var(--text-2);
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.6;
+  flex: none;
+}
+.status-dot.ok {
+  background: var(--ok);
+  opacity: 1;
+}
+.status-dot.err {
+  background: var(--err);
+  opacity: 1;
+}
+.status-dot.busy {
+  background: var(--warn);
+  opacity: 1;
+}

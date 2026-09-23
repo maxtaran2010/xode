@@ -1,0 +1,29 @@
+[package]
+name = "xode-tools"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+xode-core.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+ignore = "0.4"
+globset = "0.4"
+grep-searcher = "0.1"
+grep-regex = "0.1"
+grep-matcher = "0.1"
+similar = "2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio-util.workspace = true

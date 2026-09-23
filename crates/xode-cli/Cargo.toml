@@ -1,0 +1,19 @@
+[package]
+name = "xode-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "xode"
+path = "src/main.rs"
+
+[dependencies]
+xode-engine.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+ratatui = "0.29"
+clap = { version = "4", features = ["derive"] }
+unicode-width = "0.2"

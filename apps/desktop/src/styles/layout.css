@@ -1,0 +1,351 @@
+/* ---------- app shell */
+.app {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.cols {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* Surfaces: sidebar translucent over the native backdrop, main a darker solid-ish panel. */
+.col-sidebar {
+  position: relative;
+  flex: none;
+  background: var(--panel-solid);
+  padding-top: var(--tb);
+  min-width: 0;
+}
+.col-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding-top: var(--tb);
+}
+.col-stats {
+  flex: none;
+  width: 248px;
+  background: var(--panel-solid);
+  padding-top: var(--tb);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+}
+:root[data-backdrop="on"] .col-sidebar {
+  background: var(--panel);
+}
+:root[data-backdrop="on"] .col-main {
+  background: var(--surface);
+}
+:root[data-backdrop="on"] .col-stats {
+  background: var(--panel);
+}
+.col-sidebar + .col-main,
+.resizer + .col-main {
+  border-left: 1px solid var(--border);
+}
+
+.resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+/* ---------- titlebar */
+.titlebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--tb);
+  display: flex;
+  align-items: center;
+  z-index: 150;
+  pointer-events: none;
+}
+.titlebar > * {
+  pointer-events: auto;
+}
+.app.has-overlay .tb-left .icon-btn,
+.app.has-overlay .tb-right > .icon-btn {
+  visibility: hidden;
+}
+.app.has-overlay .tb-title {
+  color: transparent;
+}
+.tb-left {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding-left: 10px;
+  flex: none;
+}
+.traffic-space {
+  width: 76px;
+  height: 100%;
+}
+.tb-title {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tb-right {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  gap: 2px;
+  padding-right: 8px;
+}
+[data-platform="windows"] .tb-right,
+[data-platform="linux"] .tb-right {
+  padding-right: 0;
+  align-items: flex-start;
+}
+[data-platform="windows"] .tb-right > .icon-btn,
+[data-platform="linux"] .tb-right > .icon-btn {
+  /* centered on the 36px caption buttons */
+  margin-top: 4px;
+  margin-right: 6px;
+}
+.caption {
+  display: flex;
+  height: 100%;
+}
+.caption-btn {
+  width: 46px;
+  height: 100%;
+  max-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+  transition: background var(--ease), color var(--ease);
+}
+.caption-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.caption-btn.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+/* ---------- sidebar */
+.sb {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+}
+.sb-top {
+  padding: 0 8px 6px;
+}
+.sb-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 9px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+.sb-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: var(--r);
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--ease);
+  min-width: 0;
+}
+.sb-row:hover {
+  background: var(--hover);
+}
+.sb-row.active {
+  background: var(--active);
+}
+.sb-icon {
+  display: inline-flex;
+  color: var(--text-2);
+  flex: none;
+}
+.sb-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-head {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 6px 10px 0 17px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.sb-head > span {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-head-actions {
+  display: flex;
+  gap: 1px;
+}
+.sb-head .icon-btn.on {
+  color: var(--text);
+  background: var(--hover);
+}
+.sb-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 8px;
+  min-height: 0;
+}
+.sb-group + .sb-group {
+  margin-top: 2px;
+}
+.sb-project {
+  color: var(--text);
+}
+.sb-project .sb-icon {
+  color: var(--muted);
+}
+.sb-project.current .sb-icon {
+  color: var(--text-2);
+}
+.sb-hover-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity var(--ease), background var(--ease);
+}
+.sb-row:hover .sb-hover-btn {
+  opacity: 1;
+}
+.sb-hover-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.sb-chat {
+  padding-left: 33px;
+  height: 30px;
+  color: var(--text-2);
+}
+.sb-chat.active {
+  color: var(--text);
+}
+.sb-time {
+  color: var(--muted);
+  font-size: 12px;
+  opacity: 0.8;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.run-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+  margin-right: 4px;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.sb-more {
+  padding-left: 33px;
+  height: 28px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.sb-bottom {
+  padding: 6px 8px 10px;
+}
+.sb-settings {
+  color: var(--text-2);
+}
+.sb-model {
+  color: var(--muted);
+  font-size: 12px;
+  max-width: 50%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inline-edit {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  margin-left: -6px;
+  border-radius: 5px;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  outline: none;
+  font-size: inherit;
+}
+
+/* file tree */
+.ft-row {
+  height: 28px;
+  gap: 6px;
+  color: var(--text-2);
+}
+.ft-row .sb-icon {
+  color: var(--muted);
+}
+.ft-chev {
+  display: inline-flex;
+  width: 13px;
+  color: var(--muted);
+  flex: none;
+}
+
+/* drop target */
+.drop-hint {
+  position: absolute;
+  inset: 8px;
+  border: 1.5px dashed var(--accent);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  pointer-events: none;
+  z-index: 200;
+}
+/* macOS: with the sidebar open, its toggle sits at the sidebar's right edge. */
+[data-platform="macos"] .tb-left.open .icon-btn {
+  margin-left: auto;
+  margin-right: 8px;
+}

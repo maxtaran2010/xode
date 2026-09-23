@@ -1,0 +1,339 @@
+/* ---------- motion: short transform/opacity animations only (cheap under window blur) */
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --t-fast: 120ms;
+  --t: 180ms;
+  --t-slow: 240ms;
+}
+
+.presence {
+  display: contents;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@keyframes fade-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+@keyframes sink-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+@keyframes zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+@keyframes zoom-out {
+  to {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+@keyframes pop-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+}
+@keyframes grow-x {
+  from {
+    width: 0;
+  }
+}
+@keyframes shrink-x {
+  to {
+    width: 0;
+  }
+}
+@keyframes nudge {
+  0% {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* ---------- overlays (settings, context view): zoom + fade in, reverse out */
+.presence[data-phase="in"] > .overlay {
+  animation: zoom-in var(--t-slow) var(--ease-out);
+}
+.presence[data-phase="out"] > .overlay {
+  animation: zoom-out var(--t) var(--ease-in) forwards;
+  pointer-events: none;
+}
+.presence[data-phase="in"] > .overlay.settings .set-nav {
+  animation: slide-in-left var(--t-slow) var(--ease-out);
+}
+
+/* ---------- side columns: width grows/shrinks, content keeps its width while clipped */
+.presence[data-motion="col"] > aside {
+  overflow: hidden;
+}
+.presence[data-motion="col"][data-phase="in"] > aside {
+  animation: grow-x var(--t) var(--ease-out);
+}
+.presence[data-motion="col"][data-phase="out"] > aside {
+  animation: shrink-x var(--t) var(--ease-in) forwards;
+}
+.col-sidebar > .sb {
+  min-width: var(--col-w, auto);
+}
+.col-stats > * {
+  min-width: 247px;
+}
+
+/* ---------- keyed page / tab switches */
+.switcher {
+  display: contents;
+}
+.switcher[data-motion] > * {
+  animation: fade-up var(--t) var(--ease-out);
+}
+.switcher[data-motion="fade"] > * {
+  animation-name: fade-in;
+}
+.switcher[data-motion="side"] > * {
+  animation-name: slide-in-right;
+}
+
+/* ---------- height collapse (thinking, tool calls, segments) */
+.collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--t) var(--ease-out),
+    opacity var(--t) var(--ease-out);
+}
+.collapse.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.chev {
+  transition: transform var(--t) var(--ease-out);
+}
+
+/* ---------- chat items */
+.chat-inner > .item,
+.chat-inner > .empty {
+  animation: fade-up var(--t-slow) var(--ease-out);
+}
+.chat-inner.no-anim > .item {
+  animation: none;
+}
+.item[data-kind="perm"] {
+  animation: nudge 320ms var(--ease-out);
+}
+.msg-user.pending .bubble {
+  transition: opacity var(--t) var(--ease-out);
+}
+.jump {
+  animation: pop-in-up var(--t) var(--spring);
+}
+.turn-meta {
+  animation: fade-in var(--t-slow) var(--ease-out);
+}
+.drop-hint {
+  animation: fade-in var(--t-fast) var(--ease-out);
+}
+
+/* ---------- menus, popups, toasts */
+.menu {
+  animation: pop-in var(--t-fast) var(--ease-out);
+  transform-origin: top left;
+}
+.menu.up {
+  animation-name: pop-in-up;
+  transform-origin: bottom left;
+}
+.menu.closing {
+  animation: pop-out 100ms var(--ease-in) forwards;
+  pointer-events: none;
+}
+.popup {
+  animation: pop-in-up var(--t-fast) var(--ease-out);
+  transform-origin: bottom center;
+}
+.toast {
+  animation: pop-in-up var(--t) var(--spring);
+}
+.toast.leaving {
+  animation: pop-out 160ms var(--ease-in) forwards;
+}
+
+/* ---------- composer rows */
+.queue-item,
+.working,
+.attachments > *,
+.comp-progress {
+  animation: fade-up var(--t) var(--ease-out);
+}
+
+/* ---------- press feedback */
+.btn,
+.icon-btn,
+.seg button,
+.send,
+.queue-steer,
+.queue-x,
+.working-stop,
+.chip,
+.toggle,
+.ctx-ring {
+  transition:
+    background var(--ease),
+    color var(--ease),
+    border-color var(--ease),
+    transform 90ms var(--ease-out);
+}
+.btn:active:not(:disabled),
+.icon-btn:active:not(:disabled),
+.seg button:active,
+.send:active:not(:disabled),
+.queue-steer:active,
+.queue-x:active,
+.working-stop:active,
+.chip:active,
+.ctx-ring:active {
+  transform: scale(0.95);
+}
+.sb-row,
+.set-nav-item,
+.menu-item,
+.popup-item,
+.tool-row,
+.thinking-row,
+.seg-row,
+.ctx-list-row {
+  transition:
+    background var(--ease),
+    color var(--ease),
+    transform 90ms var(--ease-out);
+}
+.sb-row:active,
+.set-nav-item:active,
+.menu-item:active:not(:disabled),
+.ctx-list-row:active {
+  transform: scale(0.985);
+}
+
+/* ---------- segmented control: sliding thumb */
+.seg {
+  position: relative;
+  isolation: isolate;
+}
+.seg.has-thumb button.on {
+  background: transparent;
+  box-shadow: none;
+}
+.seg-thumb {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 0;
+  z-index: -1;
+  border-radius: 5px;
+  background: var(--elev);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition:
+    transform var(--t) var(--ease-out),
+    width var(--t) var(--ease-out);
+}
+.seg-thumb.instant {
+  transition: none;
+}
+
+/* ---------- settings nav: sliding highlight */
+.set-nav {
+  position: relative;
+}
+.set-nav-thumb {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 0;
+  border-radius: var(--r-sm);
+  background: var(--active);
+  pointer-events: none;
+  transition:
+    transform var(--t) var(--ease-out),
+    height var(--t) var(--ease-out);
+}
+.set-nav.has-thumb .set-nav-item.active {
+  background: transparent;
+}
+.set-nav-item {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
