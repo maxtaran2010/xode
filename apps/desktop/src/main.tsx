@@ -1,6 +1,6 @@
 import { render } from "solid-js/web";
 import App from "./App";
-import { initBackend, isTauri } from "./lib/api";
+import { demoMode, initBackend, isTauri } from "./lib/api";
 import { preloadHighlighter } from "./lib/markdown";
 import { init, newChat, openKnowledge, openSession, openSettings, send, setState, type KbTab, type SettingsPage } from "./lib/store";
 import "./styles/base.css";
@@ -17,7 +17,8 @@ async function main() {
   await init();
   render(() => <App />, document.getElementById("root")!);
   preloadHighlighter();
-  if (!isTauri) await demo();
+  if (demoMode) await (await import("./lib/reel")).playReel();
+  else if (!isTauri) await demo();
 }
 
 /** Mock-only entry views for development screenshots: ?view=chat|stream|context|settings&page=... */
@@ -33,6 +34,8 @@ async function demo() {
   } else if (view === "kb") {
     await openSession("s-demo");
     openKnowledge((q.get("tab") as KbTab) || "sources", q.get("note") || undefined);
+  } else if (view === "reel") {
+    await (await import("./lib/reel")).playReel();
   } else if (view === "settings") {
     openSettings((q.get("page") as SettingsPage) || "gateway");
   }

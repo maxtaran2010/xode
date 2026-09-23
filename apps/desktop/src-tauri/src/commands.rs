@@ -295,3 +295,9 @@ pub fn kb_embed_retry(engine: Eng) {
 pub fn set_session_kb(engine: Eng, session_id: String, off: Vec<String>) -> Res<()> {
     map!(engine.set_session_kb(&session_id, off))
 }
+
+/// `XODE_DEMO=1`: the UI runs on the built-in mock engine and plays a scripted demo (README recording).
+#[tauri::command]
+pub fn demo_mode() -> bool {
+    std::env::var("XODE_DEMO").map(|v| !v.is_empty() && v != "0").unwrap_or(false)
+}

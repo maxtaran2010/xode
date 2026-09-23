@@ -2,6 +2,7 @@
 import type { Component } from "solid-js";
 import {
   AppWindow,
+  Library,
   Braces,
   FilePen,
   FilePlus,
@@ -28,6 +29,7 @@ const ICONS: Record<string, Icon> = {
   web_search: Globe,
   web_fetch: Link,
   browser: AppWindow,
+  kb: Library,
 };
 
 export function toolIcon(name: string): Icon {
@@ -80,6 +82,8 @@ export function toolSummary(name: string, args: unknown): string {
       return pick("symbol", "query", "name", "action");
     case "browser":
       return [pick("action"), pick("url", "selector", "text")].filter(Boolean).join(" ");
+    case "kb":
+      return [pick("action"), pick("q", "id", "title", "path", "tag")].filter(Boolean).join(" ");
     default: {
       const first = Object.values(a).find((v) => typeof v === "string");
       return first ? String(first) : "";
@@ -113,6 +117,8 @@ export function toolActivity(name: string, args: unknown): string {
       return "Fetching…";
     case "browser":
       return "Using browser…";
+    case "kb":
+      return "Searching knowledge…";
     case "":
       return "Thinking…";
     default:

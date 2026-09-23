@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="150" viewBox="0 0 640 150">
+  <g transform="translate(58 23)">
+    <rect x="3" y="3" width="98" height="98" rx="26" fill="#1b1f28" stroke="#2c3240" stroke-width="3"/>
+    <path d="M34 34 70 70" stroke="#4a8dff" stroke-width="11" stroke-linecap="round"/>
+    <path d="M70 34 34 70" stroke="#e6e9ef" stroke-width="11" stroke-linecap="round"/>
+  </g>
+  <text x="196" y="92" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="84" font-weight="600" fill="#1b1f28" letter-spacing="-2">xode</text>
+  <text x="200" y="128" font-family="-apple-system, 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="17" fill="#5b6475" letter-spacing="5.5">AGENTS FOR SMALL CONTEXTS</text>
+</svg>

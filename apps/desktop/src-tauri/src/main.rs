@@ -90,6 +90,7 @@ fn main() {
             commands::kb_titles,
             commands::kb_embed_retry,
             commands::set_session_kb,
+            commands::demo_mode,
             commands::queued,
             commands::is_running,
             commands::command,

@@ -153,7 +153,7 @@ const FINAL_TEXT = `Compaction now uses \`Config::threshold\`, so the reserve fo
 - \`crates/xode-core/src/compaction.rs\` — \`should_compact\` delegates to \`cfg.threshold(limit)\` and logs when it triggers.
 - Tests cover ratio, absolute and reserve-clamped thresholds.
 
-Report: [compaction-report.html](out/compaction-report.html) · chart: ![thresholds](out/thresholds.png)
+Report: [compaction-report.html](out/compaction-report.html)
 
 \`\`\`rust
 pub fn should_compact(used: u64, cfg: &Config, limit: u64) -> bool {
@@ -398,6 +398,13 @@ export function createMockBackend(): Backend {
         think: THINK_1,
         text: "Let me check how the threshold is computed now.",
         calls: [
+          {
+            name: "kb",
+            args: { action: "search", q: "compaction threshold reserve" },
+            result:
+              "p1 Compaction · L1-6 · 90/140 tok\n  PATH.md + STATE handoff, working set of touched files…\np4 Turso for the index · L1-3 · 60/60 tok\n  Moved the code index and the KB to Turso: vectors + FTS…",
+            ms: 34,
+          },
           { name: "read", args: { path: "crates/xode-core/src/compaction.rs", offset: 1, limit: 80 }, result: READ_RESULT, ms: 18 },
           { name: "grep", args: { pattern: "threshold", path: "crates" }, result: GREP_RESULT, ms: 41 },
           { name: "glob", args: { pattern: "crates/*/src/**/*.rs" }, result: FILES.filter((f) => f.endsWith(".rs")).join("\n"), ms: 9 },
@@ -417,22 +424,6 @@ export function createMockBackend(): Backend {
       await sleep(350);
       for (let si = 0; si < steps.length && !ctl.cancelled; si++) {
         const step = steps[si];
-        if (si === 2) {
-          // compaction between steps
-          st.context_used = 63120;
-          emit({ type: "stats", session: sid, stats: { ...st } });
-          emit({ type: "compaction_start", session: sid, used: 63120, limit: 76800 });
-          await sleep(1800);
-          const seg = (segments.get(sid)?.length ?? 0) + 1;
-          const segment: Segment = { session_id: sid, index: seg, path: PATH_MD, state: STATE, tokens_before: 63120, tokens_after: 6420, created_at: now() };
-          segments.set(sid, [...(segments.get(sid) ?? []), segment]);
-          st.compactions += 1;
-          st.context_used = 6420;
-          emit({ type: "compaction_done", session: sid, segment: seg, path: PATH_MD, state: STATE, before: 63120, after: 6420 });
-          const seed = mkMsg("user", [{ type: "text", text: "[seed]" }], { kind: "seed", segment: seg });
-          push(sid, seed);
-          emit({ type: "message", session: sid, message: seed });
-        }
         const id = uid("turn");
         const t0 = now();
         emit({ type: "turn_start", session: sid, id });
@@ -605,9 +596,26 @@ export function createMockBackend(): Backend {
       if (name === "context") return { type: "open", panel: "context" };
       if (name === "export") return { type: "export", markdown: "# Export\n", path: "chat.md" };
       if (name === "compact") {
-        emit({ type: "compaction_start", session: sid, used: 40000, limit: 76800 });
-        await sleep(900);
-        emit({ type: "compaction_done", session: sid, segment: 2, path: PATH_MD, state: STATE, before: 40000, after: 5200 });
+        const st = stats.get(sid) ?? baseStats();
+        const used = Math.max(st.context_used, 38400);
+        emit({ type: "compaction_start", session: sid, used, limit: 76800 });
+        emit({ type: "compaction_progress", session: sid, stage: "prefill", tokens: 0, expected: 420 });
+        await sleep(700);
+        for (let t = 0; t <= 420; t += 30) {
+          emit({ type: "compaction_progress", session: sid, stage: "handoff", tokens: t, expected: 420 });
+          await sleep(90);
+        }
+        emit({ type: "compaction_progress", session: sid, stage: "path", tokens: 420, expected: 420 });
+        await sleep(350);
+        emit({ type: "compaction_progress", session: sid, stage: "seed", tokens: 420, expected: 420 });
+        await sleep(350);
+        const seg = (segments.get(sid)?.length ?? 0) + 1;
+        segments.set(sid, [...(segments.get(sid) ?? []), { session_id: sid, index: seg, path: PATH_MD, state: STATE, tokens_before: used, tokens_after: 5200, created_at: now() }]);
+        st.compactions += 1;
+        st.context_used = 5200;
+        stats.set(sid, st);
+        emit({ type: "stats", session: sid, stats: { ...st } });
+        emit({ type: "compaction_done", session: sid, segment: seg, path: PATH_MD, state: STATE, before: used, after: 5200 });
         return { type: "done" };
       }
       return { type: "notice", text: `/${name}: ok` };

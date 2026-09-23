@@ -158,10 +158,16 @@ async function tauriBackend(): Promise<Backend> {
 }
 
 let backend: Backend;
+/** Desktop app started with XODE_DEMO=1: mock engine + scripted demo. */
+export let demoMode = false;
 
 export async function initBackend(): Promise<Backend> {
   if (backend) return backend;
-  backend = isTauri ? await tauriBackend() : (await import("./mock")).createMockBackend();
+  if (isTauri) {
+    const { invoke } = await import("@tauri-apps/api/core");
+    demoMode = await invoke<boolean>("demo_mode").catch(() => false);
+  }
+  backend = isTauri && !demoMode ? await tauriBackend() : (await import("./mock")).createMockBackend();
   return backend;
 }
 
