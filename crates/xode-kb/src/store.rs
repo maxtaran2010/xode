@@ -730,16 +730,48 @@ impl KbStore {
     }
 
     /// Upsert parsed notes (None = unchanged content, only refresh mtime/size). Returns removed chunk ids.
+    ///
+    /// Turso's FTS index builds a segment per statement, so rows go in as multi-row INSERTs
+    /// (one statement per ~250 rows) instead of one statement per row. Note ids stay stable
+    /// across updates (the model may hold them).
     fn write_notes(&self, source: i64, items: Vec<(String, (i64, i64), String, Option<md::Parsed>)>) -> Result<Vec<i64>> {
         let mut removed = vec![];
         self.conn.lock().transaction(|c| {
+            let rels: Vec<&str> = items.iter().map(|i| i.0.as_str()).collect();
+            let mut prev: HashMap<String, i64> = HashMap::new();
+            for part in rels.chunks(400) {
+                let ph = (0..part.len()).map(|i| format!("?{}", i + 2)).collect::<Vec<_>>().join(",");
+                let mut ps: Vec<xode_db::Value> = vec![xode_db::Value::Integer(source)];
+                ps.extend(part.iter().map(|r| xode_db::Value::Text(r.to_string())));
+                c.for_each(&format!("SELECT path, id FROM notes WHERE source=?1 AND path IN ({ph})"), ps, |r| {
+                    if let (Ok(p), Ok(id)) = (r.get::<String>(0), r.get::<i64>(1)) {
+                        prev.insert(p, id);
+                    }
+                    true
+                })?;
+            }
+            let mut next_id: i64 = c.scalar::<i64>("SELECT COALESCE(MAX(id), 0) FROM notes", ())?.unwrap_or(0) + 1;
+            let mut notes: Vec<Vec<xode_db::Value>> = vec![];
+            let mut chunks: Vec<Vec<xode_db::Value>> = vec![];
+            let mut links: Vec<Vec<xode_db::Value>> = vec![];
+            let mut replaced: Vec<i64> = vec![];
             for (rel, (mtime, size), hash, parsed) in items {
-                let prev: Option<i64> = c.scalar("SELECT id FROM notes WHERE source=?1 AND path=?2", params![source, rel])?;
+                let old = prev.get(&rel).copied();
                 let Some(p) = parsed else {
-                    if let Some(nid) = prev {
+                    if let Some(nid) = old {
                         c.execute("UPDATE notes SET mtime=?2, size=?3 WHERE id=?1", params![nid, mtime, size])?;
                     }
                     continue;
+                };
+                let nid = match old {
+                    Some(id) => {
+                        replaced.push(id);
+                        id
+                    }
+                    None => {
+                        next_id += 1;
+                        next_id - 1
+                    }
                 };
                 let outline = p
                     .headings
@@ -747,36 +779,24 @@ impl KbStore {
                     .map(|h| format!("{}\t{}\t{}", h.level, h.line, h.text.replace(['\t', '\n'], " ")))
                     .collect::<Vec<_>>()
                     .join("\n");
-                let nid = match prev {
-                    Some(nid) => {
-                        removed.extend(c.query_map("SELECT id FROM chunks WHERE note=?1", params![nid], |r| r.get::<i64>(0))?);
-                        c.execute("DELETE FROM chunks WHERE note=?1", params![nid])?;
-                        c.execute("DELETE FROM links WHERE src=?1", params![nid])?;
-                        c.execute(
-                            "UPDATE notes SET title=?2, key=?3, tags=?4, summary=?5, tokens=?6, mtime=?7, size=?8, hash=?9, outline=?10 WHERE id=?1",
-                            params![nid, p.title, md::link_key(&rel), tags_col(&p.tags), p.summary, p.tokens, mtime, size, hash, outline],
-                        )?;
-                        nid
-                    }
-                    None => {
-                        c.execute(
-                            "INSERT INTO notes(source, path, title, key, tags, summary, tokens, mtime, size, hash, outline)
-                             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
-                            params![source, rel, p.title, md::link_key(&rel), tags_col(&p.tags), p.summary, p.tokens, mtime, size, hash, outline],
-                        )?;
-                        c.last_insert_rowid()
-                    }
-                };
+                notes.push(params![nid, source, rel, p.title, md::link_key(&rel), tags_col(&p.tags), p.summary, p.tokens, mtime, size, hash, outline]);
                 for (i, ch) in p.chunks.iter().enumerate() {
-                    c.execute(
-                        "INSERT INTO chunks(note, source, ord, heading, line_start, line_end, tokens, text) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-                        params![nid, source, i as i64, ch.heading, ch.line_start, ch.line_end, ch.tokens, ch.text],
-                    )?;
+                    chunks.push(params![nid, source, i as i64, ch.heading, ch.line_start, ch.line_end, ch.tokens, ch.text]);
                 }
                 for l in &p.links {
-                    c.execute("INSERT INTO links(src, target) VALUES (?1,?2)", params![nid, l])?;
+                    links.push(params![nid, l]);
                 }
             }
+            for part in replaced.chunks(500) {
+                let ids = part.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
+                removed.extend(c.query_map(&format!("SELECT id FROM chunks WHERE note IN ({ids})"), (), |r| r.get::<i64>(0))?);
+                c.execute(&format!("DELETE FROM chunks WHERE note IN ({ids})"), ())?;
+                c.execute(&format!("DELETE FROM links WHERE src IN ({ids})"), ())?;
+                c.execute(&format!("DELETE FROM notes WHERE id IN ({ids})"), ())?;
+            }
+            insert_rows(c, "notes(id, source, path, title, key, tags, summary, tokens, mtime, size, hash, outline)", notes)?;
+            insert_rows(c, "chunks(note, source, ord, heading, line_start, line_end, tokens, text)", chunks)?;
+            insert_rows(c, "links(src, target)", links)?;
             Ok(())
         })?;
         Ok(removed)
@@ -1253,6 +1273,21 @@ impl Drop for KbStore {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
     }
+}
+
+/// Multi-row INSERT in statements of at most ~2000 parameters.
+fn insert_rows(c: &Connection, into: &str, rows: Vec<Vec<xode_db::Value>>) -> xode_db::Result<()> {
+    let Some(width) = rows.first().map(|r| r.len()) else { return Ok(()) };
+    let per = (2000 / width).max(1);
+    for part in rows.chunks(per) {
+        let ph = (0..part.len())
+            .map(|i| format!("({})", (0..width).map(|j| format!("?{}", i * width + j + 1)).collect::<Vec<_>>().join(",")))
+            .collect::<Vec<_>>()
+            .join(",");
+        let ps: Vec<xode_db::Value> = part.iter().flatten().cloned().collect();
+        c.execute(&format!("INSERT INTO {into} VALUES {ph}"), ps)?;
+    }
+    Ok(())
 }
 
 fn init_db(c: &Connection) -> Result<()> {

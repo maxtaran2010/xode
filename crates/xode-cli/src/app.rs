@@ -288,6 +288,22 @@ impl App {
                 self.view.notice(format!("use the desktop app or edit {}", p.display()), Level::Info);
             }
             "project" => self.view.notice(format!("project {} · {}", self.project.name, self.project.root), Level::Info),
+            "knowledge" => match self.engine.kb_overview(&self.project.id) {
+                Ok(o) => {
+                    let off = self.engine.session(&self.session.id).map(|s| s.kb_off).unwrap_or_default();
+                    let lines: Vec<String> = o
+                        .sources
+                        .iter()
+                        .map(|s| {
+                            let on = !off.contains(&s.key) && !off.iter().any(|k| k == s.layer.key());
+                            format!("{} {} · {} · {} notes", if on { "on " } else { "off" }, s.layer.label(), s.name, s.notes)
+                        })
+                        .collect();
+                    let text = if lines.is_empty() { "knowledge base is empty: /kb add library <folder>".into() } else { lines.join("\n") };
+                    self.view.notice(text, Level::Info)
+                }
+                Err(e) => self.view.notice(format!("{e}"), Level::Error),
+            },
             other => self.view.notice(format!("panel '{other}' is not available in the terminal"), Level::Info),
         }
     }

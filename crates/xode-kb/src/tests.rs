@@ -226,3 +226,57 @@ fn builtin_model_embeds_multilingual() {
     println!("sims {s:?}");
     assert!(s[0] > s[1] && s[2] > s[1]);
 }
+
+/// Scale check: `XODE_KB_MB=100 cargo test --release -p xode-kb scale -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn scale_ingest_and_search() {
+    let mb: usize = std::env::var("XODE_KB_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(50);
+    let tmp = tempfile::tempdir().unwrap();
+    let lib = tmp.path().join("big");
+    let words = ["alpha", "build", "cache", "deploy", "engine", "flag", "graph", "hash", "index", "join", "kernel", "latency", "memory", "node", "offset", "parser", "query", "render", "socket", "token", "update", "vector", "worker", "yaml", "zone"];
+    let mut total = 0usize;
+    let mut i = 0usize;
+    let t = Instant::now();
+    while total < mb << 20 {
+        let mut s = format!("# Note {i}\n\nLinks to [[Note {}]] and [[Note {}]].\n\n", i / 2, i / 3);
+        for sec in 0..6 {
+            s.push_str(&format!("## Section {sec}\n\n"));
+            for p in 0..6 {
+                let line: Vec<&str> = (0..40).map(|k| words[(i * 7 + sec * 13 + p * 3 + k * 11) % words.len()]).collect();
+                s.push_str(&line.join(" "));
+                s.push_str("\n\n");
+            }
+        }
+        total += s.len();
+        write(&lib, &format!("d{}/n{i}.md", i % 200), &s);
+        i += 1;
+    }
+    println!("generated {i} files, {} MB in {:?}", total >> 20, t.elapsed());
+    let hub = EmbedHub::new(&xode_core::config::Config { knowledge: Knowledge { embedder: "off".into(), ..Default::default() }, ..Default::default() });
+    let g = KbStore::open('g', &tmp.path().join("g.db"), &tmp.path().join("m"), Layer::Memory, hub, &Knowledge::default()).unwrap();
+    let t = Instant::now();
+    let src = g.add_source(Layer::Library, &lib, "big").unwrap();
+    let kb = Kb { global: Some(g.clone()), project: None };
+    let t2 = Instant::now();
+    loop {
+        let s = kb.sources().into_iter().find(|s| s.key == src.key).unwrap();
+        if s.notes as usize == i {
+            println!("indexed {} notes / {} chunks in {:?}", s.notes, s.chunks, t.elapsed());
+            break;
+        }
+        assert!(t2.elapsed() < Duration::from_secs(1800));
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    let db = std::fs::metadata(tmp.path().join("g.db")).map(|m| m.len()).unwrap_or(0)
+        + std::fs::metadata(tmp.path().join("g.db-wal")).map(|m| m.len()).unwrap_or(0);
+    println!("db size {} MB", db >> 20);
+    for q in ["kernel latency socket", "vector worker", "note 12345 section"] {
+        let t = Instant::now();
+        let h = kb.search(&Sel::default(), q, &SearchOpts { k: 8, text_only: true, ..Default::default() });
+        println!("search `{q}`: {} hits in {:?}", h.len(), t.elapsed());
+    }
+    let t = Instant::now();
+    let gr = g.graph(&[src.id], 4000);
+    println!("graph {} nodes {} edges in {:?}", gr.nodes.len(), gr.edges.len(), t.elapsed());
+}

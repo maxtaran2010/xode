@@ -27,6 +27,7 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("redo", "", "Reapply reverted changes"),
     ("export", "", "Export chat as markdown"),
     ("project", "[path]", "Switch project"),
+    ("kb", "[list|on|off|search|add] …", "Knowledge base"),
     ("permissions", "", "Permissions"),
     ("mcp", "", "MCP servers"),
     ("tools", "", "Tools"),
@@ -238,6 +239,7 @@ pub async fn run(e: &Arc<Engine>, sid: &str, line: &str) -> Result<CommandResult
             notice(format!("effort: {}", cur(&cfg)))
         }
         "context" => Ok(CommandResult::Open { panel: "context".into() }),
+        "kb" | "knowledge" => kb_command(e, sid, &arg).await,
         "tokens" => {
             let v = e.context_view(sid)?;
             let s = e.session(sid)?;
@@ -511,4 +513,91 @@ async fn connect(e: &Arc<Engine>, sid: &str, arg: &str) -> Result<CommandResult>
         lines.push(format!("using {model}"));
     }
     notice(lines.join("\n"))
+}
+
+/// `/kb` — open the knowledge base (desktop); `list`, `on|off <source|layer>`, `search <q>`,
+/// `add <layer> <path>`.
+async fn kb_command(e: &Arc<Engine>, sid: &str, arg: &str) -> Result<CommandResult> {
+    let sess = e.session(sid)?;
+    let pid = sess.project_id.clone();
+    let (sub, rest) = arg.split_once(char::is_whitespace).map(|(a, b)| (a, b.trim())).unwrap_or((arg, ""));
+    let sources = || e.kb_overview(&pid).map(|o| o.sources);
+    match sub {
+        "" => Ok(CommandResult::Open { panel: "knowledge".into() }),
+        "list" | "ls" => {
+            let off = e.session(sid)?.kb_off;
+            let mut out = String::new();
+            for l in xode_kb::Layer::ALL {
+                let list: Vec<_> = sources()?.into_iter().filter(|s| s.layer == l).collect();
+                if list.is_empty() {
+                    continue;
+                }
+                let lo = if off.iter().any(|k| k == l.key()) { " (off)" } else { "" };
+                out.push_str(&format!("{}{lo}\n", l.label()));
+                for s in list {
+                    let mark = if off.contains(&s.key) { "off" } else { "on " };
+                    out.push_str(&format!("  {mark} {} · {} notes · {}\n", s.name, s.notes, s.path));
+                }
+            }
+            notice(if out.is_empty() { "knowledge base is empty: /kb add library <folder>".into() } else { out.trim_end().to_string() })
+        }
+        "on" | "off" => {
+            if rest.is_empty() {
+                return notice("usage: /kb on|off <source name|library|docs|memory|project_memory|all>");
+            }
+            let srcs = sources()?;
+            let keys: Vec<String> = if rest == "all" {
+                xode_kb::Layer::ALL.iter().map(|l| l.key().to_string()).chain(srcs.iter().map(|s| s.key.clone())).collect()
+            } else if let Some(l) = xode_kb::Layer::parse(rest) {
+                vec![l.key().to_string()]
+            } else {
+                let q = rest.to_lowercase();
+                let m: Vec<String> = srcs.iter().filter(|s| s.name.to_lowercase().contains(&q) || s.key == rest).map(|s| s.key.clone()).collect();
+                if m.is_empty() {
+                    return notice(format!("no source matching `{rest}` (/kb list)"));
+                }
+                m
+            };
+            let mut off = e.session(sid)?.kb_off;
+            if sub == "off" {
+                for k in keys {
+                    if !off.contains(&k) {
+                        off.push(k);
+                    }
+                }
+            } else {
+                off.retain(|k| !keys.contains(k));
+            }
+            e.set_session_kb(sid, off)?;
+            Box::pin(kb_command(e, sid, "list")).await
+        }
+        "search" | "s" => {
+            if rest.is_empty() {
+                return notice("usage: /kb search <query>");
+            }
+            let off = e.session(sid)?.kb_off;
+            let hits = e.kb_search(&pid, crate::KbSearchReq { q: rest.into(), k: Some(10), off, ..Default::default() }).await?;
+            if hits.is_empty() {
+                return notice("no matches");
+            }
+            let t = hits
+                .iter()
+                .map(|h| {
+                    let head = if h.heading.is_empty() { String::new() } else { format!(" › {}", h.heading) };
+                    format!("{} {}{}\n  {}", h.id, h.title, head, h.snippet)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            notice(t)
+        }
+        "add" => {
+            let (layer, path) = rest.split_once(char::is_whitespace).map(|(a, b)| (a, b.trim())).unwrap_or(("", ""));
+            if path.is_empty() {
+                return notice("usage: /kb add library|docs <folder>");
+            }
+            let s = e.kb_add_source(&pid, layer, path.trim_matches('"'), "")?;
+            notice(format!("added {} to {} · indexing", s.name, s.layer.label()))
+        }
+        _ => notice("usage: /kb [list|on|off|search|add]"),
+    }
 }
