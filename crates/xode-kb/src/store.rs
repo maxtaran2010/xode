@@ -899,11 +899,13 @@ impl KbStore {
             self.bits.write().clear();
             self.set_meta("embed_model", &e.id())?;
         }
-        let total: u64 = self.conn.lock().scalar("SELECT COUNT(*) FROM chunks WHERE emb IS NULL", ())?.unwrap_or(0);
+        // Global progress: embedded chunks out of all chunks (a clean 0..100% bar).
+        let all: u64 = self.conn.lock().scalar("SELECT COUNT(*) FROM chunks", ())?.unwrap_or(0);
+        let base: u64 = all.saturating_sub(self.conn.lock().scalar("SELECT COUNT(*) FROM chunks WHERE emb IS NULL", ())?.unwrap_or(0));
         let key = self.prefix.to_string();
         let mut done = 0u64;
         let mut cursor = 0i64;
-        self.emit(key.clone(), "embed", 0, total);
+        self.emit(key.clone(), "embed", base, all);
         loop {
             if self.stop.load(Ordering::SeqCst) || self.hub.wanted_id().as_deref() != Some(e.id().as_str()) {
                 break;
@@ -950,9 +952,9 @@ impl KbStore {
                 }
             }
             done += rows.len() as u64;
-            self.emit(key.clone(), "embed", done, total.max(done));
+            self.emit(key.clone(), "embed", (base + done).min(all), all);
         }
-        self.emit(key, "idle", done, total.max(done));
+        self.emit(key, "idle", (base + done).min(all), all);
         Ok(())
     }
 

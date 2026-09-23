@@ -10,7 +10,7 @@ license = "MIT"
 [workspace.dependencies]
 xode-core = { path = "crates/xode-core" }
 xode-tools = { path = "crates/xode-tools" }
-xode-engine = { path = "crates/xode-engine" }
+xode-engine = { path = "crates/xode-engine", default-features = false }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 futures = "0.3"

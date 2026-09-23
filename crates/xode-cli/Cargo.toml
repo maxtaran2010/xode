@@ -9,7 +9,7 @@ name = "xode"
 path = "src/main.rs"
 
 [dependencies]
-xode-engine.workspace = true
+xode-engine = { workspace = true, default-features = false }
 tokio.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true

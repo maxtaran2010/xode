@@ -28,7 +28,11 @@ function SourceRow(props: { s: KbSource }) {
     const x = p();
     return x && x.total ? Math.min(100, (x.done / x.total) * 100) : 0;
   };
-  const embedPct = () => (s().chunks ? Math.round((s().embedded / s().chunks) * 100) : 100);
+  const embedPct = () => {
+    const x = p();
+    if (x && x.stage === "embed" && x.total) return Math.round((x.done / x.total) * 100);
+    return s().chunks ? Math.round((s().embedded / s().chunks) * 100) : 100;
+  };
   const more = (e: MouseEvent) =>
     menuFor(
       e.currentTarget as HTMLElement,
