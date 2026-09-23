@@ -17,3 +17,7 @@ chrono.workspace = true
 ratatui = "0.29"
 clap = { version = "4", features = ["derive"] }
 unicode-width = "0.2"
+
+[features]
+default = ["builtin-embed"]
+builtin-embed = ["xode-engine/builtin-embed"]

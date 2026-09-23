@@ -20,7 +20,12 @@ hex.workspace = true
 reqwest = { workspace = true, features = ["blocking"] }
 ignore = "0.4"
 notify-debouncer-mini = "0.7"
-fastembed = { version = "7", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"] }
+fastembed = { version = "7", default-features = false, features = ["ort-download-binaries-rustls-tls", "hf-hub-rustls-tls"], optional = true }
+
+[features]
+default = ["builtin-embed"]
+# Built-in ONNX embeddings via fastembed. Off -> gateway embeddings only (no ONNX Runtime dep).
+builtin-embed = ["dep:fastembed"]
 
 [dev-dependencies]
 tempfile = "3"

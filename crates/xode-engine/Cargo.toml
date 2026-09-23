@@ -25,3 +25,7 @@ parking_lot.workspace = true
 base64.workspace = true
 once_cell.workspace = true
 ignore = "0.4"
+
+[features]
+default = ["builtin-embed"]
+builtin-embed = ["xode-kb/builtin-embed"]

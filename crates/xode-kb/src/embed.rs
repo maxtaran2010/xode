@@ -23,6 +23,7 @@ pub const BUILTIN_MODELS: &[(&str, &str)] = &[
     ("bge-small-en", "BGE small EN (quantized) · 384"),
 ];
 
+#[cfg(feature = "builtin-embed")]
 fn fastembed_model(name: &str) -> Option<(fastembed::EmbeddingModel, usize, bool)> {
     use fastembed::EmbeddingModel as M;
     Some(match name {
@@ -34,6 +35,7 @@ fn fastembed_model(name: &str) -> Option<(fastembed::EmbeddingModel, usize, bool
     })
 }
 
+#[cfg(feature = "builtin-embed")]
 struct Builtin {
     name: String,
     dim: usize,
@@ -41,6 +43,7 @@ struct Builtin {
     model: Mutex<fastembed::TextEmbedding>,
 }
 
+#[cfg(feature = "builtin-embed")]
 impl Embedder for Builtin {
     fn id(&self) -> String {
         format!("builtin:{}", self.name)
@@ -258,6 +261,7 @@ impl EmbedHub {
         self.cur.lock().as_ref().filter(|c| c.0 == want).map(|c| c.1.clone())
     }
 
+    #[cfg(feature = "builtin-embed")]
     fn build_builtin(&self, name: &str) -> Result<Arc<dyn Embedder>> {
         let (m, dim, e5) = fastembed_model(name).ok_or_else(|| anyhow!("unknown built-in model `{name}`"))?;
         std::fs::create_dir_all(&self.cache_dir).ok();
@@ -267,6 +271,11 @@ impl EmbedHub {
             .with_max_length(512);
         let model = fastembed::TextEmbedding::try_new(opts).map_err(|e| anyhow!("{e}")).context("load embedding model")?;
         Ok(Arc::new(Builtin { name: name.to_string(), dim, e5, model: Mutex::new(model) }))
+    }
+
+    #[cfg(not(feature = "builtin-embed"))]
+    fn build_builtin(&self, _name: &str) -> Result<Arc<dyn Embedder>> {
+        Err(anyhow!("this build has no built-in embeddings; set the embedder to a gateway in Settings → Knowledge"))
     }
 }
 

@@ -26,7 +26,10 @@ jobs:
           - os: macos-13
             target: x86_64-apple-darwin
             platform: macos-x64
-          - os: ubuntu-22.04
+            # No ONNX Runtime prebuilt for x86_64-apple-darwin: gateway embeddings only.
+            cli_flags: "--no-default-features"
+            desktop_flags: "--no-default-features --features custom-protocol"
+          - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             platform: linux-x64
           - os: windows-latest
@@ -51,7 +54,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - name: Linux desktop deps
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == 'ubuntu-24.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
@@ -67,14 +70,14 @@ jobs:
 
       - name: Build CLI
         shell: bash
-        run: cargo build --release -p xode-cli --target ${{ matrix.target }}
+        run: cargo build --release -p xode-cli --target ${{ matrix.target }} ${{ matrix.cli_flags }}
 
       - name: Build desktop
         working-directory: apps/desktop
         shell: bash
         run: |
           pnpm install --frozen-lockfile
-          pnpm tauri build --target ${{ matrix.target }}
+          pnpm tauri build --target ${{ matrix.target }} -- ${{ matrix.desktop_flags }}
 
       - name: Package
         id: pkg
