@@ -149,4 +149,24 @@ cd apps/desktop && pnpm install && pnpm tauri build
 
 Xode picks up any OpenAI-compatible or Anthropic endpoint. On first start it scans localhost for model servers.
 
+## Contributing
+
+Issues and pull requests are welcome: bug reports, filters for more command outputs, tree-sitter languages, gateway quirks, UI polish.
+
+1. Fork, then branch off `main`.
+2. Before opening a PR, run the checks:
+   ```sh
+   cargo test --workspace --exclude xode-desktop
+   cd apps/desktop && pnpm install && npx tsc --noEmit
+   ```
+3. Try the UI without a model: `pnpm dev` in `apps/desktop` runs on the in-browser mock engine. To run the desktop app on the mock engine, set `XODE_DEMO=1`.
+4. Keep PRs focused, and describe how you tested them (OS, model, gateway).
+
+House rules:
+- **Windows is the main target.** Never assume a POSIX shell inside tools. Paths shown to the model use `/`.
+- **Every token counts.** Tool schemas and tool outputs must stay compact, and new output goes through the caps and filters.
+- **The engine is the only API.** Frontends talk to `xode-engine`, never directly to the lower crates.
+- **UI:** clean and Codex-like; lucide icons only; no emoji or helper text. Motion is short transform/opacity animations that respect reduced motion.
+- **Turso:** its full-text index builds a segment per statement, so write FTS-indexed rows with multi-row `INSERT`s.
+
 <sub>The demo above is the real desktop app, running on its built-in mock engine (`XODE_DEMO=1`) and recorded with `scripts/record-window.swift`.</sub>
