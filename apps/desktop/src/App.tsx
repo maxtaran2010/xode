@@ -1,4 +1,4 @@
-import { onCleanup, onMount, Show } from "solid-js";
+import { createEffect, onCleanup, onMount, Show } from "solid-js";
 import Chat from "./components/Chat";
 import Composer, { addAttachments, mimeFor, readFileAttachment } from "./components/Composer";
 import ContextView from "./components/ContextView";
@@ -11,7 +11,8 @@ import { MenuHost } from "./components/ui";
 import { api, isTauri, onNativeDrop, platform } from "./lib/api";
 import { basename } from "./lib/format";
 import { Presence } from "./lib/motion";
-import { addProject, setState, state } from "./lib/store";
+import { setLinkBase } from "./lib/markdown";
+import { activeProject, activeSessionInfo, addProject, setState, state } from "./lib/store";
 
 async function handlePaths(paths: string[]) {
   const files: string[] = [];
@@ -27,6 +28,8 @@ async function handlePaths(paths: string[]) {
 }
 
 export default function App() {
+  // Relative file links in replies resolve against the chat's working folder.
+  createEffect(() => setLinkBase(activeSessionInfo()?.cwd || activeProject()?.root || ""));
   let un: (() => void) | undefined;
   onCleanup(() => un?.());
   onMount(async () => {

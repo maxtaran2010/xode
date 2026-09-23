@@ -225,7 +225,30 @@ export async function saveText(defaultPath: string, contents: string): Promise<v
 export async function openInFileManager(path: string): Promise<void> {
   if (!isTauri) return;
   const { openPath } = await import("@tauri-apps/plugin-opener");
-  await openPath(path);
+  await openPath(await expandHome(path));
+}
+
+/** Show a file selected in Finder / Explorer. */
+export async function revealInFileManager(path: string): Promise<void> {
+  if (!isTauri) return;
+  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+  await revealItemInDir(await expandHome(path));
+}
+
+/** Open a web URL in the default browser. */
+export async function openExternal(url: string): Promise<void> {
+  if (!isTauri) {
+    window.open(url, "_blank", "noreferrer");
+    return;
+  }
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(url);
+}
+
+async function expandHome(p: string): Promise<string> {
+  if (!p.startsWith("~/")) return p;
+  const { homeDir } = await import("@tauri-apps/api/path");
+  return `${(await homeDir()).replace(/[\\/]+$/, "")}/${p.slice(2)}`;
 }
 
 /** OS notification + taskbar flash / dock bounce. */

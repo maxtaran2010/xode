@@ -650,3 +650,37 @@ button.divider:hover .divider-label {
     transform: translateX(100%);
   }
 }
+
+/* ---------- links to local files the agent produced */
+.md .file-link {
+  cursor: pointer;
+}
+.md a.file-link,
+.md code.file-link {
+  color: var(--accent-2);
+  text-decoration: none;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent-2) 55%, transparent);
+}
+.md a.file-link:hover,
+.md code.file-link:hover {
+  border-bottom-style: solid;
+}
+.md img.md-img {
+  display: block;
+  max-width: min(100%, 640px);
+  max-height: 420px;
+  margin: 8px 0;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--hover);
+  object-fit: contain;
+}
+.md img.md-img.file-link {
+  transition: transform 90ms var(--ease-out), border-color var(--ease);
+}
+.md img.md-img.file-link:hover {
+  border-color: var(--border-strong);
+}
+.md img.md-img.file-link:active {
+  transform: scale(0.99);
+}

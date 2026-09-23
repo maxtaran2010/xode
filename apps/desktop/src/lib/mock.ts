@@ -153,6 +153,8 @@ const FINAL_TEXT = `Compaction now uses \`Config::threshold\`, so the reserve fo
 - \`crates/xode-core/src/compaction.rs\` — \`should_compact\` delegates to \`cfg.threshold(limit)\` and logs when it triggers.
 - Tests cover ratio, absolute and reserve-clamped thresholds.
 
+Report: [compaction-report.html](out/compaction-report.html) · chart: ![thresholds](out/thresholds.png)
+
 \`\`\`rust
 pub fn should_compact(used: u64, cfg: &Config, limit: u64) -> bool {
     cfg.compaction.enabled && used >= cfg.threshold(limit)

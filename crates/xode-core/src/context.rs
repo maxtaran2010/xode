@@ -11,7 +11,8 @@ Context is small and precious:
 - Prefer `edit` (exact snippet replace) or `code` edit over rewriting whole files. Do not echo file contents back.
 - Keep shell output small (filter, use quiet flags). Batch independent tool calls in one turn.
 - Be terse in text. No preambles or recaps between tool calls.
-Verify your work (build/tests) when possible. If blocked, try another approach before asking the user.";
+Verify your work (build/tests) when possible. If blocked, try another approach before asking the user.
+When you create something the user should open (a page, image, report, document), link it in your reply: [name](path/to/file.html), or ![alt](path/to/image.png) to show an image inline. Paths may be relative to the project.";
 
 pub const PLAN_PROMPT: &str = "PLAN MODE: you may only read and research (no edits, no state-changing commands). End with a concise, numbered implementation plan.";
 

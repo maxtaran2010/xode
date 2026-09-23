@@ -160,12 +160,89 @@ md.renderer.rules.fence = (tokens, idx) => {
   return `<div class="code-block"><div class="code-head"><span>${escapeHtml(lang)}</span><button class="code-copy" title="Copy">${COPY_SVG}</button></div>${highlight(code, lang)}</div>`;
 };
 md.renderer.rules.code_block = md.renderer.rules.fence;
+// ---------- links to local files (pages, images … the agent made)
+
+let linkBase = "";
+const [linkBaseVersion, setLinkBaseVersion] = createSignal(0);
+
+/** Folder relative file links resolve against (the chat's cwd / project root). */
+export function setLinkBase(base: string) {
+  const b = base.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (b === linkBase) return;
+  linkBase = b;
+  setLinkBaseVersion((v) => v + 1);
+}
+export { linkBaseVersion };
+
+const FILE_EXT = /\.(html?|png|jpe?g|gif|webp|svg|avif|bmp|ico|pdf|md|txt|csv|tsv|json|xml|log|mp4|mov|webm|mp3|wav|ogg|zip|docx?|xlsx?|pptx?)$/i;
+const IMG_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i;
+const isAbs = (p: string) => p.startsWith("/") || /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith("\\\\");
+
+/** Absolute local path for a link target, or null for URLs of other schemes. */
+export function resolveLocal(href: string): string | null {
+  let p = href.trim();
+  try {
+    p = decodeURI(p);
+  } catch {
+    /* keep as is */
+  }
+  if (/^file:\/\//i.test(p)) {
+    p = p.replace(/^file:\/\//i, "");
+    if (/^\/[a-zA-Z]:\//.test(p)) p = p.slice(1);
+  } else if (/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[a-zA-Z]:[\\/]/.test(p)) return null;
+  p = p.replace(/[?#].*$/, "");
+  if (!p) return null;
+  if (isAbs(p)) return p;
+  if (p.startsWith("~/")) return p;
+  return linkBase ? `${linkBase}/${p.replace(/^\.\//, "")}` : p;
+}
+
+/** URL the webview can load a local image from (Tauri asset protocol). */
+function assetUrl(path: string): string {
+  const w = window as unknown as { __TAURI_INTERNALS__?: { convertFileSrc?: (p: string, proto?: string) => string } };
+  const conv = w.__TAURI_INTERNALS__?.convertFileSrc;
+  return conv ? conv(path, "asset") : path;
+}
+
+const attr = (s: string) => escapeHtml(s).replace(/"/g, "&quot;");
+
 const defaultLink = md.renderer.rules.link_open ?? ((tokens, idx, opts, _env, self) => self.renderToken(tokens, idx, opts));
 md.renderer.rules.link_open = (tokens, idx, opts, env, self) => {
-  tokens[idx].attrSet("target", "_blank");
-  tokens[idx].attrSet("rel", "noreferrer");
+  const t = tokens[idx];
+  const href = t.attrGet("href") ?? "";
+  const local = /^(https?|mailto):/i.test(href) ? null : resolveLocal(href);
+  if (local) {
+    t.attrSet("href", "#");
+    t.attrSet("data-file", local);
+    t.attrJoin("class", "file-link");
+    t.attrSet("title", local);
+  } else {
+    t.attrSet("target", "_blank");
+    t.attrSet("rel", "noreferrer");
+  }
   return defaultLink(tokens, idx, opts, env, self);
 };
+
+md.renderer.rules.image = (tokens, idx) => {
+  const t = tokens[idx];
+  const src = t.attrGet("src") ?? "";
+  const alt = t.content || "";
+  const local = /^(https?|data):/i.test(src) ? null : resolveLocal(src);
+  if (!local) return `<img class="md-img" src="${attr(src)}" alt="${attr(alt)}" loading="lazy">`;
+  return `<img class="md-img file-link" src="${attr(assetUrl(local))}" alt="${attr(alt)}" title="${attr(local)}" data-file="${attr(local)}" loading="lazy">`;
+};
+
+// `out/report.html` in backticks: clickable when it looks like a file the user may want to open.
+md.renderer.rules.code_inline = (tokens, idx) => {
+  const c = tokens[idx].content;
+  if (FILE_EXT.test(c) && !/\s/.test(c) && c.length < 300) {
+    const local = resolveLocal(c);
+    if (local) return `<code class="file-link" data-file="${attr(local)}" title="${attr(local)}">${escapeHtml(c)}</code>`;
+  }
+  return `<code>${escapeHtml(c)}</code>`;
+};
+
+export { IMG_EXT };
 
 export function renderMarkdown(text: string): string {
   return md.render(text);
@@ -176,9 +253,25 @@ export function preloadHighlighter() {
   void getHighlighter();
 }
 
-/** Delegated click handler for code-block copy buttons. */
+/** Delegated click handler for rendered markdown: file links, web links, code-block copy. */
 export function handleCodeCopy(e: MouseEvent) {
-  const btn = (e.target as HTMLElement).closest(".code-copy") as HTMLElement | null;
+  const el = e.target as HTMLElement;
+  const file = el.closest("[data-file]") as HTMLElement | null;
+  if (file) {
+    e.preventDefault();
+    const path = file.dataset.file!;
+    import("./api").then((a) => (e.altKey || e.metaKey ? a.revealInFileManager(path) : a.openInFileManager(path))).catch((err) =>
+      import("./store").then((s) => s.toast(`Cannot open ${path}: ${err}`, "error")),
+    );
+    return;
+  }
+  const a = el.closest("a[href]") as HTMLAnchorElement | null;
+  if (a && /^(https?|mailto):/i.test(a.getAttribute("href") ?? "")) {
+    e.preventDefault();
+    import("./api").then((x) => x.openExternal(a.href));
+    return;
+  }
+  const btn = el.closest(".code-copy") as HTMLElement | null;
   if (!btn) return;
   const code = btn.closest(".code-block")?.querySelector("pre")?.textContent ?? "";
   navigator.clipboard.writeText(code).catch(() => {});

@@ -189,9 +189,18 @@ pub fn inline(s: &str, base: Style) -> Vec<Span<'static>> {
             if let Some(close) = (i + 1..chars.len()).find(|&j| chars[j] == ']') {
                 if close + 1 < chars.len() && chars[close + 1] == '(' {
                     if let Some(end) = (close + 2..chars.len()).find(|&j| chars[j] == ')') {
+                        // `![alt](img.png)`: same as a link.
+                        if buf.ends_with('!') {
+                            buf.pop();
+                        }
                         flush(&mut out, &mut buf, style(bold, italic));
                         let text: String = chars[i + 1..close].iter().collect();
-                        out.push(Span::styled(text, Style::default().fg(th.accent).add_modifier(Modifier::UNDERLINED)));
+                        let target: String = chars[close + 2..end].iter().collect();
+                        out.push(Span::styled(text.clone(), Style::default().fg(th.accent).add_modifier(Modifier::UNDERLINED)));
+                        // Show the target so the terminal can open it (cmd/ctrl-click on paths and URLs).
+                        if !target.is_empty() && target != text {
+                            out.push(Span::styled(format!(" {target}"), Style::default().fg(th.muted)));
+                        }
                         i = end + 1;
                         continue;
                     }
@@ -243,7 +252,8 @@ mod tests {
         let spans = inline("*hi* see [docs](http://x)", theme::text());
         assert_eq!(spans[0].content, "hi");
         assert!(spans[0].style.add_modifier.contains(Modifier::ITALIC));
-        assert_eq!(spans.last().unwrap().content, "docs");
+        assert_eq!(spans[spans.len() - 2].content, "docs");
+        assert_eq!(spans.last().unwrap().content, " http://x");
     }
 
     #[test]
