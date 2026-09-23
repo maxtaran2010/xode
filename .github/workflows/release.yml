@@ -1,0 +1,139 @@
+name: Release
+
+# Build CLI + desktop for every platform/arch and attach zips to a GitHub Release.
+# Trigger: push a tag like v0.1.0, or run manually.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: aarch64-apple-darwin
+            platform: macos-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            platform: macos-x64
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: tag
+        shell: bash
+        run: echo "tag=${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}" >> "$GITHUB_OUTPUT"
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Linux desktop deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Build CLI
+        shell: bash
+        run: cargo build --release -p xode-cli --target ${{ matrix.target }}
+
+      - name: Build desktop
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm tauri build --target ${{ matrix.target }}
+
+      - name: Package
+        id: pkg
+        shell: bash
+        run: |
+          set -eux
+          VER="${{ steps.tag.outputs.tag }}"
+          PLAT="${{ matrix.platform }}"
+          TGT="${{ matrix.target }}"
+          OUT="dist"; mkdir -p "$OUT"
+          BINROOT="target/$TGT/release"
+          # ---- CLI zip ----
+          STAGE="$(mktemp -d)"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "$BINROOT/xode.exe" "$STAGE/"
+          else
+            cp "$BINROOT/xode" "$STAGE/"
+          fi
+          cp README.md "$STAGE/" || true
+          ( cd "$STAGE" && 7z a -tzip "cli.zip" . >/dev/null 2>&1 || zip -q -r cli.zip . )
+          mv "$STAGE/cli.zip" "$OUT/xode-cli-$VER-$PLAT.zip"
+          # ---- Desktop installers ----
+          BUND="$BINROOT/bundle"
+          case "${{ runner.os }}" in
+            macOS)
+              ditto -c -k --sequesterRsrc --keepParent "$BUND/macos/Xode.app" "$OUT/Xode-desktop-$VER-$PLAT.zip"
+              cp "$BUND"/dmg/*.dmg "$OUT/Xode-desktop-$VER-$PLAT.dmg" || true
+              ;;
+            Linux)
+              cp "$BUND"/appimage/*.AppImage "$OUT/Xode-desktop-$VER-$PLAT.AppImage" || true
+              cp "$BUND"/deb/*.deb "$OUT/Xode-desktop-$VER-$PLAT.deb" || true
+              ;;
+            Windows)
+              cp "$BUND"/nsis/*-setup.exe "$OUT/Xode-desktop-$VER-$PLAT-setup.exe" || true
+              cp "$BUND"/msi/*.msi "$OUT/Xode-desktop-$VER-$PLAT.msi" || true
+              ;;
+          esac
+          ls -la "$OUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
+          name: ${{ github.ref_name || github.event.inputs.tag }}
+          draft: true
+          generate_release_notes: true
+          files: dist/*

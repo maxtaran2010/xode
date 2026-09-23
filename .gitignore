@@ -5,3 +5,4 @@ apps/desktop/dist/
 *.log
 .DS_Store
 apps/desktop/src-tauri/gen/schemas/
+/dist/
