@@ -35,6 +35,9 @@ pub struct SessionInfo {
     pub tool_calls: u32,
     pub compactions: u32,
     pub cwd: Option<String>,
+    /// Knowledge-base layers/sources switched off for this chat.
+    #[serde(default)]
+    pub kb_off: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

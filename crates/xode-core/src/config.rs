@@ -163,6 +163,48 @@ impl Default for Notifications {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
+pub struct Knowledge {
+    pub enabled: bool,
+    /// builtin | gateway | off
+    pub embedder: String,
+    /// Built-in (ONNX, CPU) model name.
+    pub builtin_model: String,
+    /// Gateway id and model for `/v1/embeddings` when `embedder = "gateway"`.
+    pub gateway: String,
+    pub gateway_model: String,
+    /// Target chunk size in tokens (hard split at twice this).
+    pub chunk_tokens: u32,
+    /// Default number of search hits.
+    pub k: u32,
+    /// Notes longer than this return an outline unless a section is asked for.
+    pub outline_tokens: u32,
+    /// Cap on text returned by one read.
+    pub read_max_tokens: u32,
+    /// The agent may write to global / project memory.
+    pub ai_write_global: bool,
+    pub ai_write_project: bool,
+}
+
+impl Default for Knowledge {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            embedder: "builtin".into(),
+            builtin_model: "multilingual-e5-small".into(),
+            gateway: String::new(),
+            gateway_model: String::new(),
+            chunk_tokens: 400,
+            k: 8,
+            outline_tokens: 600,
+            read_max_tokens: 2000,
+            ai_write_global: true,
+            ai_write_project: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct Compaction {
     pub enabled: bool,
     /// Context window override (0 = use model-reported value, else fallback).
@@ -478,6 +520,7 @@ pub struct Config {
     pub tools: Tools,
     pub theme: Theme,
     pub notifications: Notifications,
+    pub knowledge: Knowledge,
     pub system_prompt_extra: String,
 }
 

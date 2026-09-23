@@ -35,6 +35,8 @@ pub struct SessionState {
     /// Snapshots of files before the agent changed them this turn (for /undo).
     pub undo: Vec<(String, Option<Vec<u8>>)>,
     pub turn: u32,
+    /// Knowledge-base layers/sources switched off for this chat (see `xode_kb::Sel`).
+    pub kb_off: Vec<String>,
 }
 
 pub type SharedState = Arc<Mutex<SessionState>>;
