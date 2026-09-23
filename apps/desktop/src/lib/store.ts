@@ -5,10 +5,22 @@ import { api, notify, saveText, setWindowEffect, windowEffect } from "./api";
 import { debounce } from "./format";
 import { applyEvent, emptyLive, messagesToItems, type SessionLive } from "./session";
 import { applyTheme } from "./theme";
-import type { AgentEvent, Attachment, CommandInfo, CommandResult, Config, Mode, PermDecision, Project, SessionInfo } from "./types";
+import type { AgentEvent, Attachment, CommandInfo, CommandResult, Config, KbOverview, KbProgress, Mode, PermDecision, Project, SessionInfo } from "./types";
 
-export type Overlay = null | "settings" | "context";
-export type SettingsPage = "gateway" | "tokens" | "permissions" | "generation" | "compaction" | "browser" | "mcp" | "tools" | "notifications" | "theme";
+export type Overlay = null | "settings" | "context" | "knowledge";
+export type SettingsPage =
+  | "gateway"
+  | "tokens"
+  | "permissions"
+  | "generation"
+  | "compaction"
+  | "knowledge"
+  | "browser"
+  | "mcp"
+  | "tools"
+  | "notifications"
+  | "theme";
+export type KbTab = "sources" | "notes" | "graph";
 
 export interface Toast {
   id: number;
@@ -27,6 +39,18 @@ interface State {
   activeSession: string | null;
   live: Record<string, SessionLive>;
   commands: CommandInfo[];
+  kb: {
+    overview: KbOverview | null;
+    /** Latest indexing progress per source key / store prefix. */
+    progress: Record<string, KbProgress>;
+    /** Bumped when notes change (lists / graph refetch). */
+    rev: number;
+    tab: KbTab;
+    /** Note to open in the Notes tab. */
+    note: string | null;
+    /** Selection for a chat that does not exist yet. */
+    pendingOff: string[] | null;
+  };
   ui: {
     sidebar: boolean;
     stats: boolean;
@@ -67,6 +91,7 @@ export const [state, setState] = createStore<State>({
   activeSession: null,
   live: {},
   commands: [],
+  kb: { overview: null, progress: {}, rev: 0, tab: saved<KbTab>("kbTab", "sources"), note: null, pendingOff: null },
   ui: {
     sidebar: saved("sidebar", true),
     stats: saved("stats", true),
@@ -153,6 +178,10 @@ function coalesce(list: AgentEvent[]): AgentEvent[] {
 }
 
 function onEvent(ev: AgentEvent) {
+  if (ev.type === "kb_progress") {
+    onKbProgress(ev);
+    return;
+  }
   queue.push(ev);
   const isDelta = ev.type === "text_delta" || ev.type === "thinking_delta" || ev.type === "stats";
   if (!isDelta) {
@@ -195,6 +224,66 @@ function notifyFor(ev: AgentEvent) {
   }
 }
 
+// ---------- knowledge base
+
+const reloadKb = debounce(() => loadKb(), 300);
+
+function onKbProgress(ev: Extract<AgentEvent, { type: "kb_progress" }>) {
+  const p: KbProgress = { source: ev.source, stage: ev.stage, done: ev.done, total: ev.total };
+  setState("kb", "progress", ev.source, p);
+  if (ev.stage === "idle") {
+    setState("kb", "rev", (r) => r + 1);
+    reloadKb();
+  }
+}
+
+export async function loadKb() {
+  const pid = state.activeProject;
+  if (!pid) return;
+  try {
+    setState("kb", "overview", reconcile(await api.kbOverview(pid)));
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+export function openKnowledge(tab?: KbTab, note?: string) {
+  batch(() => {
+    if (tab) setState("kb", "tab", tab);
+    if (note) setState("kb", "note", note);
+    setState("ui", "overlay", "knowledge");
+  });
+  loadKb();
+}
+
+export function setKbTab(tab: KbTab) {
+  setState("kb", "tab", tab);
+  persist("kbTab", tab);
+}
+
+/** Layer / source keys switched off for the active chat (or the chat about to be created). */
+export function kbOff(): string[] {
+  const s = activeSessionInfo();
+  if (s) return s.kb_off ?? [];
+  if (state.kb.pendingOff) return state.kb.pendingOff;
+  return (state.kb.overview?.sources ?? []).filter((x) => !x.default_on).map((x) => x.key);
+}
+
+export async function setKbOff(off: string[]) {
+  const sid = state.activeSession;
+  if (!sid) {
+    setState("kb", "pendingOff", off);
+    return;
+  }
+  setState("sessions", (s) => s.id === sid, "kb_off", off);
+  await api.setSessionKb(sid, off).catch(fail);
+}
+
+export function toggleKb(key: string) {
+  const off = kbOff();
+  setKbOff(off.includes(key) ? off.filter((k) => k !== key) : [...off, key]);
+}
+
 // ---------- init
 
 const saveConfig = debounce((cfg: Config) => {
@@ -214,6 +303,7 @@ export async function init() {
   setState({ config, projects, sessions, backdrop, activeProject, ready: true });
   applyTheme(config.theme, backdrop);
   loadCommands();
+  loadKb();
 }
 
 export async function loadCommands() {
@@ -252,6 +342,7 @@ export function selectProject(id: string) {
   });
   persist("project", id);
   loadCommands();
+  loadKb();
 }
 
 export async function addProject(root: string) {
@@ -292,10 +383,13 @@ export async function removeProject(id: string) {
 // ---------- sessions
 
 export function newChat(projectId?: string) {
+  const changed = !!projectId && projectId !== state.activeProject;
   batch(() => {
     if (projectId) setState("activeProject", projectId);
     setState("activeSession", null);
+    setState("kb", "pendingOff", null);
   });
+  if (changed) loadKb();
 }
 
 export async function openSession(id: string) {
@@ -306,6 +400,7 @@ export async function openSession(id: string) {
       setState("activeProject", info.project_id);
       persist("project", info.project_id);
       loadCommands();
+      loadKb();
     }
   });
   if (state.live[id]?.loaded) return;
@@ -354,6 +449,11 @@ async function ensureSession(): Promise<string | null> {
     return null;
   }
   const s = await api.newSession(pid);
+  if (state.kb.pendingOff) {
+    s.kb_off = state.kb.pendingOff;
+    await api.setSessionKb(s.id, s.kb_off).catch(() => {});
+    setState("kb", "pendingOff", null);
+  }
   const cfg = state.config;
   if (cfg?.selected.gateway && cfg.selected.model) await api.setModel(s.id, cfg.selected.gateway, cfg.selected.model).catch(() => {});
   if (cfg && cfg.selected.mode !== "normal") await api.setMode(s.id, cfg.selected.mode).catch(() => {});
@@ -414,6 +514,7 @@ export async function handleCommandResult(r: CommandResult) {
       const [panel, page] = r.panel.split(":");
       if (panel === "settings") openSettings((page as SettingsPage) || "gateway");
       else if (panel === "context") setState("ui", "overlay", "context");
+      else if (panel === "knowledge") openKnowledge((page as KbTab) || undefined);
       else if (panel === "sessions" || panel === "project") setState("ui", { sidebar: true, sidebarView: "chats" });
       break;
     }

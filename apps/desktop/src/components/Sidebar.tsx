@@ -4,6 +4,7 @@ import {
   FolderOpen,
   FolderPlus,
   FolderTree,
+  Library,
   MessagesSquare,
   Pencil,
   Plus,
@@ -18,6 +19,7 @@ import {
   currentModel,
   deleteSession,
   newChat,
+  openKnowledge,
   openSession,
   openSettings,
   persist,
@@ -169,6 +171,8 @@ function ProjectGroup(props: { p: Project }) {
 }
 
 export default function Sidebar() {
+  const kbNotes = () => (state.kb.overview?.sources ?? []).reduce((a, x) => a + x.notes, 0);
+  const kbBusy = () => Object.values(state.kb.progress).some((p) => p.stage !== "idle");
   const project = () => state.projects.find((p) => p.id === state.activeProject);
   const add = async () => {
     const dir = await pickFolder();
@@ -225,6 +229,17 @@ export default function Sidebar() {
       </div>
 
       <div class="sb-bottom">
+        <Show when={state.config?.knowledge?.enabled}>
+          <button class="sb-row sb-settings" onClick={() => openKnowledge()}>
+            <span class="sb-icon">
+              <Library size={15} stroke-width={1.6} />
+            </span>
+            <span class="sb-label">Knowledge</span>
+            <span class="sb-model" classList={{ "kb-busy": kbBusy() }}>
+              {kbNotes() ? kbNotes().toLocaleString() : ""}
+            </span>
+          </button>
+        </Show>
         <button class="sb-row sb-settings" onClick={() => openSettings()}>
           <span class="sb-icon">
             <Settings size={15} stroke-width={1.6} />

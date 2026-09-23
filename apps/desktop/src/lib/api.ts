@@ -20,6 +20,13 @@ import type {
   Project,
   QueuedMsg,
   SessionInfo,
+  KbFolder,
+  KbGraph,
+  KbHit,
+  KbNote,
+  KbOverview,
+  KbSearchReq,
+  KbSource,
 } from "./types";
 
 export interface Backend {
@@ -59,6 +66,21 @@ export interface Backend {
   mcpTest(server: McpServer): Promise<string[]>;
   mcpStatus(): Promise<McpStatus[]>;
   indexStats(projectId: string): Promise<{ files: number; symbols: number; ready: boolean }>;
+  kbOverview(projectId: string): Promise<KbOverview>;
+  kbAddSource(projectId: string, layer: string, path: string, name: string): Promise<KbSource>;
+  kbRemoveSource(projectId: string, key: string): Promise<void>;
+  kbUpdateSource(projectId: string, key: string, name: string | null, defaultOn: boolean | null): Promise<void>;
+  kbReindex(projectId: string, key: string): Promise<void>;
+  kbSearch(projectId: string, req: KbSearchReq): Promise<KbHit[]>;
+  kbNote(projectId: string, id: string): Promise<KbNote>;
+  kbList(projectId: string, key: string, dir: string, tag: string): Promise<KbFolder>;
+  kbSaveNote(projectId: string, id: string, text: string): Promise<void>;
+  kbCreateNote(projectId: string, global: boolean, title: string, body: string): Promise<string>;
+  kbDeleteNote(projectId: string, id: string): Promise<void>;
+  kbGraph(projectId: string, off: string[], limit: number): Promise<KbGraph>;
+  kbTitles(projectId: string, q: string): Promise<[string, string][]>;
+  kbEmbedRetry(): Promise<void>;
+  setSessionKb(sessionId: string, off: string[]): Promise<void>;
   onEvent(cb: (ev: AgentEvent) => void): () => void;
 }
 
@@ -108,6 +130,21 @@ async function tauriBackend(): Promise<Backend> {
       return Array.isArray(v) ? (v as McpStatus[]) : [];
     },
     indexStats: (projectId) => call("index_stats", { projectId }),
+    kbOverview: (projectId) => call("kb_overview", { projectId }),
+    kbAddSource: (projectId, layer, path, name) => call("kb_add_source", { projectId, layer, path, name }),
+    kbRemoveSource: (projectId, key) => call("kb_remove_source", { projectId, key }),
+    kbUpdateSource: (projectId, key, name, defaultOn) => call("kb_update_source", { projectId, key, name, defaultOn }),
+    kbReindex: (projectId, key) => call("kb_reindex", { projectId, key }),
+    kbSearch: (projectId, req) => call("kb_search", { projectId, req }),
+    kbNote: (projectId, id) => call("kb_note", { projectId, id }),
+    kbList: (projectId, key, dir, tag) => call("kb_list", { projectId, key, dir, tag }),
+    kbSaveNote: (projectId, id, text) => call("kb_save_note", { projectId, id, text }),
+    kbCreateNote: (projectId, global, title, body) => call("kb_create_note", { projectId, global, title, body }),
+    kbDeleteNote: (projectId, id) => call("kb_delete_note", { projectId, id }),
+    kbGraph: (projectId, off, limit) => call("kb_graph", { projectId, off, limit }),
+    kbTitles: (projectId, q) => call("kb_titles", { projectId, q }),
+    kbEmbedRetry: () => call("kb_embed_retry"),
+    setSessionKb: (sessionId, off) => call("set_session_kb", { sessionId, off }),
     onEvent: (cb) => {
       let un: (() => void) | undefined;
       let dead = false;

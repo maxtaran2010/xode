@@ -23,6 +23,7 @@ import {
 } from "../lib/store";
 import type { Attachment, CommandInfo } from "../lib/types";
 import ContextRing from "./ContextRing";
+import KbPicker from "./Knowledge/KbPicker";
 import { menuFor, now, Segmented, type MenuItem } from "./ui";
 
 export function mimeFor(path: string): string {
@@ -408,6 +409,7 @@ export default function Composer() {
             <Brain size={14} stroke-width={1.6} />
             <span>{effortLabel()}</span>
           </button>
+          <KbPicker />
           <ContextRing used={ctx().used} limit={ctx().limit} threshold={ctx().threshold} onClick={() => setState("ui", "overlay", "context")} />
           <Show
             when={running()}

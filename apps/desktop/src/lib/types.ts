@@ -70,7 +70,8 @@ export type AgentEvent =
   | { type: "command_done"; session: string; result: CommandResult }
   | { type: "finished"; session: string; stopped: boolean; error: boolean }
   | { type: "notice"; session: string; text: string }
-  | { type: "error"; session: string; text: string };
+  | { type: "error"; session: string; text: string }
+  | { type: "kb_progress"; session: string; source: string; stage: KbStage; done: number; total: number };
 
 // ---------- store
 
@@ -101,6 +102,8 @@ export interface SessionInfo {
   tool_calls: number;
   compactions: number;
   cwd: string | null;
+  /** Knowledge-base layer keys / source keys switched off for this chat. */
+  kb_off?: string[];
 }
 
 export interface Segment {
@@ -278,7 +281,23 @@ export interface Config {
   tools: Tools;
   theme: Theme;
   notifications: Notifications;
+  knowledge: Knowledge;
   system_prompt_extra: string;
+}
+
+export interface Knowledge {
+  enabled: boolean;
+  /** builtin | gateway | off */
+  embedder: string;
+  builtin_model: string;
+  gateway: string;
+  gateway_model: string;
+  chunk_tokens: number;
+  k: number;
+  outline_tokens: number;
+  read_max_tokens: number;
+  ai_write_global: boolean;
+  ai_write_project: boolean;
 }
 
 export interface Notifications {
@@ -365,4 +384,117 @@ export interface QueuedMsg {
   text: string;
   /** A slash command waiting its turn (e.g. /compact). */
   command?: boolean;
+}
+
+// ---------- knowledge base
+
+export type KbLayer = "library" | "docs" | "memory" | "project_memory";
+export type KbStage = "scan" | "index" | "embed" | "idle";
+
+export interface KbSource {
+  /** `g:3` (global store) / `p:1` (project store). */
+  key: string;
+  id: number;
+  layer: KbLayer;
+  name: string;
+  path: string;
+  default_on: boolean;
+  notes: number;
+  chunks: number;
+  embedded: number;
+  bytes: number;
+}
+
+export interface KbEmbedStatus {
+  state: "off" | "loading" | "ready" | "error";
+  model: string;
+  error: string;
+}
+
+export interface KbOverview {
+  sources: KbSource[];
+  embed: KbEmbedStatus;
+  owner: boolean;
+}
+
+export interface KbHit {
+  id: string;
+  title: string;
+  heading: string;
+  line_start: number;
+  line_end: number;
+  tokens: number;
+  note_tokens: number;
+  snippet: string;
+  score: number;
+  layer: KbLayer;
+  source: string;
+  rel: string;
+}
+
+export interface KbLink {
+  id: string | null;
+  title: string;
+}
+
+export interface KbNote {
+  id: string;
+  title: string;
+  source: string;
+  source_name: string;
+  layer: KbLayer;
+  rel: string;
+  abs: string;
+  tags: string[];
+  summary: string;
+  tokens: number;
+  headings: [number, string, number][];
+  links: KbLink[];
+  backlinks: KbLink[];
+  text: string;
+  writable: boolean;
+}
+
+export interface KbNoteRow {
+  id: string;
+  title: string;
+  source: string;
+  rel: string;
+  tokens: number;
+  tags: string[];
+}
+
+export interface KbFolder {
+  folders: [string, number][];
+  notes: KbNoteRow[];
+}
+
+export interface KbGraphNode {
+  id: string;
+  title: string;
+  layer: KbLayer;
+  source: string;
+  tokens: number;
+  degree: number;
+}
+
+export interface KbGraph {
+  nodes: KbGraphNode[];
+  edges: [string, string][];
+  hidden: number;
+}
+
+export interface KbSearchReq {
+  q: string;
+  layer?: KbLayer | null;
+  tag?: string | null;
+  k?: number | null;
+  off?: string[];
+}
+
+export interface KbProgress {
+  source: string;
+  stage: KbStage;
+  done: number;
+  total: number;
 }

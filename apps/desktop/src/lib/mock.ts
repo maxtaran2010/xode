@@ -3,6 +3,7 @@
 // a permission prompt, a compaction and a goal check.
 import type { Backend } from "./api";
 import { defaultConfig } from "./defaults";
+import { mockKb } from "./mockKb";
 import type {
   AgentEvent,
   CommandInfo,
@@ -536,6 +537,7 @@ export function createMockBackend(): Backend {
     sessions: async (pid) => structuredClone(sessions.filter((s) => !pid || s.project_id === pid).sort((a, b) => b.updated_at - a.updated_at)),
     newSession: async (pid) => {
       const s = mkSession(uid("s"), pid, "New chat", 0);
+      s.kb_off = ["g:2"];
       sessions.unshift(s);
       return structuredClone(s);
     },
@@ -701,6 +703,11 @@ export function createMockBackend(): Backend {
     },
     mcpStatus: async () => [{ name: "github", connected: true, tools: 5, error: null }],
     indexStats: async () => ({ files: 214, symbols: 3810, ready: true }),
+    ...mockKb(emit),
+    setSessionKb: async (sid, off) => {
+      const s = sessions.find((x) => x.id === sid);
+      if (s) s.kb_off = [...off];
+    },
     onEvent: (cb) => {
       listeners.add(cb);
       return () => listeners.delete(cb);

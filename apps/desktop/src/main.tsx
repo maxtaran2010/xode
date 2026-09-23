@@ -2,13 +2,14 @@ import { render } from "solid-js/web";
 import App from "./App";
 import { initBackend, isTauri } from "./lib/api";
 import { preloadHighlighter } from "./lib/markdown";
-import { init, newChat, openSession, openSettings, send, setState, type SettingsPage } from "./lib/store";
+import { init, newChat, openKnowledge, openSession, openSettings, send, setState, type KbTab, type SettingsPage } from "./lib/store";
 import "./styles/base.css";
 import "./styles/layout.css";
 import "./styles/chat.css";
 import "./styles/composer.css";
 import "./styles/panels.css";
 import "./styles/settings.css";
+import "./styles/knowledge.css";
 import "./styles/motion.css";
 
 async function main() {
@@ -29,6 +30,9 @@ async function demo() {
   } else if (view === "stream") {
     newChat("p-xode");
     await send("Make the compaction trigger respect `threshold_tokens` and the reserve. Run the core tests after.", []);
+  } else if (view === "kb") {
+    await openSession("s-demo");
+    openKnowledge((q.get("tab") as KbTab) || "sources", q.get("note") || undefined);
   } else if (view === "settings") {
     openSettings((q.get("page") as SettingsPage) || "gateway");
   }

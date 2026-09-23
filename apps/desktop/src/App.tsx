@@ -2,6 +2,7 @@ import { onCleanup, onMount, Show } from "solid-js";
 import Chat from "./components/Chat";
 import Composer, { addAttachments, mimeFor, readFileAttachment } from "./components/Composer";
 import ContextView from "./components/ContextView";
+import Knowledge from "./components/Knowledge/Knowledge";
 import Settings from "./components/Settings/Settings";
 import Sidebar, { SidebarResizer } from "./components/Sidebar";
 import StatsPanel from "./components/StatsPanel";
@@ -85,6 +86,9 @@ export default function App() {
       </Presence>
       <Presence when={state.ui.overlay === "context"}>
         <ContextView />
+      </Presence>
+      <Presence when={state.ui.overlay === "knowledge"}>
+        <Knowledge />
       </Presence>
       <Show when={state.ui.dragging}>
         <div class="drop-hint" />

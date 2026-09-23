@@ -4,7 +4,9 @@ use tauri::State;
 use xode_engine::xode_core::config::{Gateway, McpServer};
 use xode_engine::xode_core::store::{Project, SessionInfo};
 use xode_engine::xode_core::{Config, LiveStats, Message, Mode};
-use xode_engine::{Attachment, CommandInfo, CommandResult, ContextView, Engine, FileEntry, GatewayTest, PermDecision};
+use xode_engine::xode_kb::store::Graph;
+use xode_engine::xode_kb::{Hit, NoteView, Source};
+use xode_engine::{Attachment, CommandInfo, CommandResult, ContextView, Engine, FileEntry, GatewayTest, KbFolder, KbOverview, KbSearchReq, PermDecision};
 
 type Eng<'a> = State<'a, Arc<Engine>>;
 type Res<T> = Result<T, String>;
@@ -200,4 +202,96 @@ pub fn index_stats(engine: Eng, project_id: String) -> serde_json::Value {
 #[tauri::command]
 pub fn write_text_file(path: String, contents: String) -> Res<()> {
     std::fs::write(&path, contents).map_err(|err| err.to_string())
+}
+
+// ---------------------------------------------------------------- knowledge base
+// Blocking engine calls (DB queries, graph building) run off the main thread.
+
+async fn blocking<T: Send + 'static>(engine: Eng<'_>, f: impl FnOnce(&Engine) -> anyhow::Result<T> + Send + 'static) -> Res<T> {
+    let e = engine.inner().clone();
+    match tauri::async_runtime::spawn_blocking(move || f(&e)).await {
+        Ok(r) => map!(r),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub async fn kb_overview(engine: Eng<'_>, project_id: String) -> Res<KbOverview> {
+    blocking(engine, move |e| e.kb_overview(&project_id)).await
+}
+
+#[tauri::command]
+pub async fn kb_add_source(engine: Eng<'_>, project_id: String, layer: String, path: String, name: String) -> Res<Source> {
+    blocking(engine, move |e| e.kb_add_source(&project_id, &layer, &path, &name)).await
+}
+
+#[tauri::command]
+pub async fn kb_remove_source(engine: Eng<'_>, project_id: String, key: String) -> Res<()> {
+    blocking(engine, move |e| e.kb_remove_source(&project_id, &key)).await
+}
+
+#[tauri::command]
+pub async fn kb_update_source(
+    engine: Eng<'_>,
+    project_id: String,
+    key: String,
+    name: Option<String>,
+    default_on: Option<bool>,
+) -> Res<()> {
+    blocking(engine, move |e| e.kb_update_source(&project_id, &key, name, default_on)).await
+}
+
+#[tauri::command]
+pub async fn kb_reindex(engine: Eng<'_>, project_id: String, key: String) -> Res<()> {
+    blocking(engine, move |e| e.kb_reindex(&project_id, &key)).await
+}
+
+#[tauri::command]
+pub async fn kb_search(engine: Eng<'_>, project_id: String, req: KbSearchReq) -> Res<Vec<Hit>> {
+    map!(engine.kb_search(&project_id, req).await)
+}
+
+#[tauri::command]
+pub async fn kb_note(engine: Eng<'_>, project_id: String, id: String) -> Res<NoteView> {
+    blocking(engine, move |e| e.kb_note(&project_id, &id)).await
+}
+
+#[tauri::command]
+pub async fn kb_list(engine: Eng<'_>, project_id: String, key: String, dir: String, tag: String) -> Res<KbFolder> {
+    blocking(engine, move |e| e.kb_list(&project_id, &key, &dir, &tag)).await
+}
+
+#[tauri::command]
+pub async fn kb_save_note(engine: Eng<'_>, project_id: String, id: String, text: String) -> Res<()> {
+    blocking(engine, move |e| e.kb_save_note(&project_id, &id, &text)).await
+}
+
+#[tauri::command]
+pub async fn kb_create_note(engine: Eng<'_>, project_id: String, global: bool, title: String, body: String) -> Res<String> {
+    blocking(engine, move |e| e.kb_create_note(&project_id, global, &title, &body)).await
+}
+
+#[tauri::command]
+pub async fn kb_delete_note(engine: Eng<'_>, project_id: String, id: String) -> Res<()> {
+    blocking(engine, move |e| e.kb_delete_note(&project_id, &id)).await
+}
+
+#[tauri::command]
+pub async fn kb_graph(engine: Eng<'_>, project_id: String, off: Vec<String>, limit: usize) -> Res<Graph> {
+    blocking(engine, move |e| e.kb_graph(&project_id, off, limit)).await
+}
+
+#[tauri::command]
+pub async fn kb_titles(engine: Eng<'_>, project_id: String, q: String) -> Res<Vec<(String, String)>> {
+    blocking(engine, move |e| e.kb_titles(&project_id, &q)).await
+}
+
+#[tauri::command]
+pub fn kb_embed_retry(engine: Eng) {
+    engine.kb_embed_retry()
+}
+
+#[tauri::command]
+pub fn set_session_kb(engine: Eng, session_id: String, off: Vec<String>) -> Res<()> {
+    map!(engine.set_session_kb(&session_id, off))
 }

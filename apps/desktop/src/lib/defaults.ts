@@ -115,6 +115,19 @@ export function defaultConfig(): Config {
     },
     theme: { preset: "fluent-blue", blur: true, tokens: {}, font_size: 14, mono_font: "" },
     notifications: { permission: true, finished: true, errors: true, sound: true, only_unfocused: true },
+    knowledge: {
+      enabled: true,
+      embedder: "builtin",
+      builtin_model: "multilingual-e5-small",
+      gateway: "",
+      gateway_model: "",
+      chunk_tokens: 400,
+      k: 8,
+      outline_tokens: 600,
+      read_max_tokens: 2000,
+      ai_write_global: true,
+      ai_write_project: true,
+    },
     system_prompt_extra: "",
   };
 }

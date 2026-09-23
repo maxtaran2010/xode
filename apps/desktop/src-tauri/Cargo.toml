@@ -12,6 +12,7 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+anyhow.workspace = true
 xode-engine = { path = "../../../crates/xode-engine" }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-dialog = "2"
