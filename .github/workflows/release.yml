@@ -23,12 +23,6 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             platform: macos-arm64
-          - os: macos-13
-            target: x86_64-apple-darwin
-            platform: macos-x64
-            # No ONNX Runtime prebuilt for x86_64-apple-darwin: gateway embeddings only.
-            cli_flags: "--no-default-features"
-            desktop_flags: "--no-default-features --features custom-protocol"
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             platform: linux-x64

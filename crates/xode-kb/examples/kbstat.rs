@@ -15,4 +15,7 @@ fn main() {
     try_q(&c, "SELECT COUNT(emb) FROM chunks");
     try_q(&c, "SELECT COUNT(*) FROM chunks WHERE bits IS NOT NULL");
     try_q(&c, "SELECT COUNT(*) FROM chunks WHERE length(emb) > 0");
+    try_q(&c, "SELECT COUNT(*) FROM links");
+    try_q(&c, "SELECT COUNT(*) FROM links WHERE dst IS NOT NULL");
+    try_q(&c, "SELECT COUNT(*) FROM notes");
 }
