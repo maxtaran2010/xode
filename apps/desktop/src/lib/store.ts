@@ -62,6 +62,7 @@ interface State {
     attachments: Attachment[];
     toasts: Toast[];
     dragging: boolean;
+    onboarding: boolean;
   };
 }
 
@@ -103,6 +104,7 @@ export const [state, setState] = createStore<State>({
     attachments: [],
     toasts: [],
     dragging: false,
+    onboarding: false,
   },
 });
 
@@ -304,6 +306,39 @@ export async function init() {
   applyTheme(config.theme, backdrop);
   loadCommands();
   loadKb();
+  if (!projects.length && !config.gateways.length) setState("ui", "onboarding", true);
+}
+
+/** Close onboarding and refresh anything it may have imported. */
+export async function finishOnboarding() {
+  setState("ui", "onboarding", false);
+  persist("onboarded", true);
+  try {
+    const [projects, sessions, config] = await Promise.all([api.projects(), api.sessions(null), api.config()]);
+    batch(() => {
+      setState({ projects, sessions, config });
+      if (!state.activeProject) setState("activeProject", projects[0]?.id ?? null);
+    });
+    loadCommands();
+    loadKb();
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+/** Scan localhost for a model server and adopt the first one found. */
+export async function scanForModel(): Promise<number> {
+  const found = await api.scanGateways([]).catch(() => [] as import("./types").Gateway[]);
+  if (found.length) {
+    patchConfig((c) => {
+      c.gateways = [...c.gateways, ...found.filter((g) => !c.gateways.some((x) => x.url === g.url))];
+      if (!c.selected.gateway && found[0]) {
+        c.selected.gateway = found[0].id;
+        c.selected.model = found[0].models[0]?.id ?? "";
+      }
+    });
+  }
+  return found.length;
 }
 
 export async function loadCommands() {

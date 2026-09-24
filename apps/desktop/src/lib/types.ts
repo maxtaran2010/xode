@@ -498,3 +498,17 @@ export interface KbProgress {
   done: number;
   total: number;
 }
+
+export interface ImportSource {
+  tool: string;
+  label: string;
+  available: boolean;
+  projects: number;
+  chats: number;
+  path: string;
+}
+export interface ImportResult {
+  projects: number;
+  chats: number;
+  messages: number;
+}

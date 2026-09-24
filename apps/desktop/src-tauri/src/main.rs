@@ -91,6 +91,8 @@ fn main() {
             commands::kb_embed_retry,
             commands::set_session_kb,
             commands::demo_mode,
+            commands::import_detect,
+            commands::import_run,
             commands::queued,
             commands::is_running,
             commands::command,

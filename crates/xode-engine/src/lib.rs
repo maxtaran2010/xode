@@ -24,10 +24,12 @@
 pub mod api;
 mod commands;
 mod engine;
+mod import;
 mod kb;
 
 pub use api::*;
 pub use engine::Engine;
+pub use import::{ImportResult, ImportSource};
 pub use kb::{KbFolder, KbNoteRow, KbOverview, KbSearchReq};
 pub use xode_kb;
 pub use xode_core;

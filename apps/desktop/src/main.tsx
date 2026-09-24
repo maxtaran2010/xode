@@ -36,6 +36,8 @@ async function demo() {
     openKnowledge((q.get("tab") as KbTab) || "sources", q.get("note") || undefined);
   } else if (view === "reel") {
     await (await import("./lib/reel")).playReel();
+  } else if (view === "onboarding") {
+    setState("ui", "onboarding", true);
   } else if (view === "settings") {
     openSettings((q.get("page") as SettingsPage) || "gateway");
   }

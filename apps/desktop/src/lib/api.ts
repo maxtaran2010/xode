@@ -27,6 +27,8 @@ import type {
   KbOverview,
   KbSearchReq,
   KbSource,
+  ImportSource,
+  ImportResult,
 } from "./types";
 
 export interface Backend {
@@ -81,6 +83,8 @@ export interface Backend {
   kbTitles(projectId: string, q: string): Promise<[string, string][]>;
   kbEmbedRetry(): Promise<void>;
   setSessionKb(sessionId: string, off: string[]): Promise<void>;
+  importDetect(): Promise<ImportSource[]>;
+  importRun(tool: string, projects: boolean, chats: boolean): Promise<ImportResult>;
   onEvent(cb: (ev: AgentEvent) => void): () => void;
 }
 
@@ -145,6 +149,8 @@ async function tauriBackend(): Promise<Backend> {
     kbTitles: (projectId, q) => call("kb_titles", { projectId, q }),
     kbEmbedRetry: () => call("kb_embed_retry"),
     setSessionKb: (sessionId, off) => call("set_session_kb", { sessionId, off }),
+    importDetect: () => call("import_detect"),
+    importRun: (tool, projects, chats) => call("import_run", { tool, projects, chats }),
     onEvent: (cb) => {
       let un: (() => void) | undefined;
       let dead = false;

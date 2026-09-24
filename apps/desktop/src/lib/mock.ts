@@ -714,6 +714,12 @@ export function createMockBackend(): Backend {
     mcpStatus: async () => [{ name: "github", connected: true, tools: 5, error: null }],
     indexStats: async () => ({ files: 214, symbols: 3810, ready: true }),
     ...mockKb(emit),
+    importDetect: async () => [
+      { tool: "claude_code", label: "Claude Code", available: true, projects: 6, chats: 42, path: "~/.claude/projects" },
+      { tool: "codex", label: "Codex", available: true, projects: 9, chats: 0, path: "~/.codex" },
+      { tool: "opencode", label: "OpenCode", available: false, projects: 0, chats: 0, path: "~/.local/share/opencode" },
+    ],
+    importRun: async (_tool, projects, chats) => ({ projects: projects ? 6 : 0, chats: chats ? 42 : 0, messages: chats ? 610 : 0 }),
     setSessionKb: async (sid, off) => {
       const s = sessions.find((x) => x.id === sid);
       if (s) s.kb_off = [...off];

@@ -301,3 +301,15 @@ pub fn set_session_kb(engine: Eng, session_id: String, off: Vec<String>) -> Res<
 pub fn demo_mode() -> bool {
     std::env::var("XODE_DEMO").map(|v| !v.is_empty() && v != "0").unwrap_or(false)
 }
+
+// ---------------------------------------------------------------- onboarding import
+#[tauri::command]
+pub async fn import_detect(engine: Eng<'_>) -> Res<Vec<xode_engine::ImportSource>> {
+    let e = engine.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || Ok(e.import_detect())).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn import_run(engine: Eng<'_>, tool: String, projects: bool, chats: bool) -> Res<xode_engine::ImportResult> {
+    blocking(engine, move |e| e.import_run(&tool, projects, chats)).await
+}
