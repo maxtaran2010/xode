@@ -948,7 +948,7 @@ impl KbStore {
             }
             let rows: Vec<(i64, i64, String, String, String)> = self.conn.lock().query_map(
                 "SELECT c.id, c.source, n.title, c.heading, c.text FROM chunks c JOIN notes n ON n.id = c.note
-                 WHERE c.id > ?1 AND c.emb IS NULL ORDER BY c.id LIMIT 128",
+                 WHERE c.id > ?1 AND c.emb IS NULL ORDER BY c.id LIMIT 512",
                 params![cursor],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )?;
