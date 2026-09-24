@@ -442,14 +442,17 @@ export async function openSession(id: string) {
   if (state.live[id]?.loaded) return;
   ensureLive(id);
   try {
-    const [msgs, running, stats, ctx] = await Promise.all([
-      api.messages(id),
-      api.isRunning(id),
-      api.stats(id),
-      api.contextView(id).catch(() => null),
-    ]);
-    const items = messagesToItems(msgs, ctx?.segments ?? [], running);
+    // Render the chat as soon as messages arrive; the heavy contextView (tokenization)
+    // loads separately so it never blocks opening the chat.
+    const [msgs, running, stats] = await Promise.all([api.messages(id), api.isRunning(id), api.stats(id)]);
+    const items = messagesToItems(msgs, [], running);
     setState("live", id, (s) => ({ ...s, items: [...items, ...s.items.filter((i) => !msgs.some((m) => m.id === i.id))], loaded: true, running, stats }));
+    // Fill compaction-segment token counts once the context view resolves (non-blocking).
+    api.contextView(id).then((ctx) => {
+      if (!ctx || state.activeSession !== id) return;
+      const withSegs = messagesToItems(msgs, ctx.segments ?? [], !!state.live[id]?.running);
+      setState("live", id, "items", reconcile([...withSegs, ...(state.live[id]?.items ?? []).filter((i) => !msgs.some((m) => m.id === i.id))], { key: "id" }));
+    }).catch(() => {});
   } catch (e) {
     setState("live", id, "loaded", true);
     fail(e);
