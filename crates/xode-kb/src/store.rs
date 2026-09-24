@@ -192,6 +192,17 @@ pub struct KbStore {
     watchers: Mutex<HashMap<i64, Debouncer<RecommendedWatcher>>>,
     generation: AtomicU64,
     stop: AtomicBool,
+    /// Per-source counts for `sources()`, valid for one `generation`; embedding updates it in place.
+    stats: Mutex<Option<(u64, HashMap<i64, SrcStats>)>>,
+}
+
+/// Cached per-source counts (full scans take seconds on large libraries).
+#[derive(Clone, Copy, Default)]
+struct SrcStats {
+    notes: u64,
+    bytes: u64,
+    chunks: u64,
+    embedded: u64,
 }
 
 fn now() -> i64 {
@@ -272,6 +283,7 @@ impl KbStore {
             watchers: Mutex::new(HashMap::new()),
             generation: AtomicU64::new(1),
             stop: AtomicBool::new(false),
+            stats: Mutex::new(None),
         });
         if owner {
             std::fs::create_dir_all(memory_dir).ok();
@@ -378,23 +390,46 @@ impl KbStore {
 
     // ------------------------------------------------------------------ sources
 
+    /// Per-source counts, recomputed only after content changes (not on every call).
+    fn source_stats(&self) -> HashMap<i64, SrcStats> {
+        let gen = self.generation();
+        if let Some((g, m)) = self.stats.lock().as_ref() {
+            if *g == gen {
+                return m.clone();
+            }
+        }
+        let mut m: HashMap<i64, SrcStats> = HashMap::new();
+        {
+            let c = self.conn.lock();
+            let _ = c.for_each("SELECT source, COUNT(*), SUM(size) FROM notes GROUP BY source", (), |r| {
+                let e = m.entry(r.get(0).unwrap_or(0)).or_default();
+                (e.notes, e.bytes) = (r.get(1).unwrap_or(0), r.get(2).unwrap_or(0));
+                true
+            });
+            let _ = c.for_each("SELECT source, COUNT(*) FROM chunks GROUP BY source", (), |r| {
+                let e = m.entry(r.get(0).unwrap_or(0)).or_default();
+                e.chunks = r.get(1).unwrap_or(0);
+                e.embedded = e.chunks;
+                true
+            });
+            // Counting the NULLs is far cheaper than touching every embedding blob.
+            let _ = c.for_each("SELECT source, COUNT(*) FROM chunks WHERE emb IS NULL GROUP BY source", (), |r| {
+                let e = m.entry(r.get(0).unwrap_or(0)).or_default();
+                e.embedded = e.embedded.saturating_sub(r.get(1).unwrap_or(0));
+                true
+            });
+        }
+        *self.stats.lock() = Some((gen, m.clone()));
+        m
+    }
+
     pub fn sources(&self) -> Vec<Source> {
+        let stats = self.source_stats();
         let c = self.conn.lock();
-        let mut stats: HashMap<i64, (u64, u64)> = HashMap::new();
-        let _ = c.for_each("SELECT source, COUNT(*), SUM(size) FROM notes GROUP BY source", (), |r| {
-            stats.insert(r.get(0).unwrap_or(0), (r.get(1).unwrap_or(0), r.get(2).unwrap_or(0)));
-            true
-        });
-        let mut ch: HashMap<i64, (u64, u64)> = HashMap::new();
-        let _ = c.for_each("SELECT source, COUNT(*), SUM(emb IS NOT NULL) FROM chunks GROUP BY source", (), |r| {
-            ch.insert(r.get(0).unwrap_or(0), (r.get(1).unwrap_or(0), r.get(2).unwrap_or(0)));
-            true
-        });
         c.query_map("SELECT id, layer, name, path, default_on FROM sources ORDER BY id", (), |r| {
             let id: i64 = r.get(0)?;
             let layer = Layer::parse(&r.get::<String>(1)?).unwrap_or(Layer::Library);
-            let (notes, bytes) = stats.get(&id).copied().unwrap_or_default();
-            let (chunks, embedded) = ch.get(&id).copied().unwrap_or_default();
+            let SrcStats { notes, bytes, chunks, embedded } = stats.get(&id).copied().unwrap_or_default();
             Ok(Source {
                 key: self.src_key(id),
                 id,
@@ -896,6 +931,7 @@ impl KbStore {
         let Some(e) = self.hub.get() else { return Ok(()) };
         if self.meta("embed_model").as_deref() != Some(e.id().as_str()) {
             self.conn.lock().execute("UPDATE chunks SET emb=NULL, bits=NULL", ())?;
+            *self.stats.lock() = None;
             self.bits.write().clear();
             self.set_meta("embed_model", &e.id())?;
         }
@@ -956,6 +992,11 @@ impl KbStore {
                     "UPDATE chunks SET emb = CASE id{emb_cases} END, bits = CASE id{bit_cases} END WHERE id IN ({ids})"
                 );
                 self.conn.lock().execute(&sql, ps)?;
+                if let Some((_, m)) = self.stats.lock().as_mut() {
+                    for (_, src, _, _, _) in &rows {
+                        m.entry(*src).or_default().embedded += 1;
+                    }
+                }
             }
             {
                 let mut b = self.bits.write();

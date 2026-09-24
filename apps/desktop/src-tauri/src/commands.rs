@@ -29,8 +29,8 @@ pub fn set_config(engine: Eng, cfg: Config) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn projects(engine: Eng) -> Res<Vec<Project>> {
-    map!(engine.projects())
+pub async fn projects(engine: Eng<'_>) -> Res<Vec<Project>> {
+    blocking(engine, |e| e.projects()).await
 }
 
 #[tauri::command]
@@ -49,8 +49,8 @@ pub fn remove_project(engine: Eng, id: String) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn sessions(engine: Eng, project_id: Option<String>) -> Res<Vec<SessionInfo>> {
-    map!(engine.sessions(project_id.as_deref()))
+pub async fn sessions(engine: Eng<'_>, project_id: Option<String>) -> Res<Vec<SessionInfo>> {
+    blocking(engine, move |e| e.sessions(project_id.as_deref())).await
 }
 
 #[tauri::command]
@@ -69,13 +69,13 @@ pub fn rename_session(engine: Eng, id: String, title: String) -> Res<()> {
 }
 
 #[tauri::command]
-pub fn delete_session(engine: Eng, id: String) -> Res<()> {
-    map!(engine.delete_session(&id))
+pub async fn delete_session(engine: Eng<'_>, id: String) -> Res<()> {
+    blocking(engine, move |e| e.delete_session(&id)).await
 }
 
 #[tauri::command]
-pub fn messages(engine: Eng, session_id: String) -> Res<Vec<Message>> {
-    map!(engine.messages(&session_id))
+pub async fn messages(engine: Eng<'_>, session_id: String) -> Res<Vec<Message>> {
+    blocking(engine, move |e| e.messages(&session_id)).await
 }
 
 #[tauri::command]
@@ -119,8 +119,8 @@ pub async fn command(engine: Eng<'_>, session_id: String, line: String) -> Res<C
 }
 
 #[tauri::command]
-pub fn commands(engine: Eng, project_id: Option<String>) -> Vec<CommandInfo> {
-    engine.commands(project_id.as_deref())
+pub async fn commands(engine: Eng<'_>, project_id: Option<String>) -> Res<Vec<CommandInfo>> {
+    blocking(engine, move |e| Ok(e.commands(project_id.as_deref()))).await
 }
 
 #[tauri::command]
@@ -134,8 +134,8 @@ pub fn set_model(engine: Eng, session_id: String, gateway_id: String, model: Str
 }
 
 #[tauri::command]
-pub fn context_view(engine: Eng, session_id: String) -> Res<ContextView> {
-    map!(engine.context_view(&session_id))
+pub async fn context_view(engine: Eng<'_>, session_id: String) -> Res<ContextView> {
+    blocking(engine, move |e| e.context_view(&session_id)).await
 }
 
 #[tauri::command]
@@ -169,13 +169,13 @@ pub async fn refresh_models(engine: Eng<'_>, gateway_id: String) -> Res<Gateway>
 }
 
 #[tauri::command]
-pub fn list_dir(engine: Eng, path: String) -> Res<Vec<FileEntry>> {
-    map!(engine.list_dir(&path))
+pub async fn list_dir(engine: Eng<'_>, path: String) -> Res<Vec<FileEntry>> {
+    blocking(engine, move |e| e.list_dir(&path)).await
 }
 
 #[tauri::command]
-pub fn complete_path(engine: Eng, project_id: String, prefix: String) -> Vec<String> {
-    engine.complete_path(&project_id, &prefix)
+pub async fn complete_path(engine: Eng<'_>, project_id: String, prefix: String) -> Res<Vec<String>> {
+    blocking(engine, move |e| Ok(e.complete_path(&project_id, &prefix))).await
 }
 
 #[tauri::command]
@@ -194,8 +194,8 @@ pub fn mcp_status(engine: Eng) -> serde_json::Value {
 }
 
 #[tauri::command]
-pub fn index_stats(engine: Eng, project_id: String) -> serde_json::Value {
-    engine.index_stats(&project_id)
+pub async fn index_stats(engine: Eng<'_>, project_id: String) -> Res<serde_json::Value> {
+    blocking(engine, move |e| Ok(e.index_stats(&project_id))).await
 }
 
 /// Used by the export flow after the native save dialog.

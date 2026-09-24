@@ -60,11 +60,17 @@ fn good_root(s: &str) -> bool {
     if !p.is_absolute() || !p.is_dir() || p.parent().is_none() {
         return false;
     }
-    if p.components().any(|c| c.as_os_str() == ".git") {
+    if p.components().any(|c| c.as_os_str() == ".git") || in_agent_data(p) {
         return false;
     }
     let tmp = std::env::temp_dir();
     !(p.starts_with(&tmp) || s.starts_with("/tmp/") || s.starts_with("/private/") || s.starts_with("/var/folders/"))
+}
+
+/// Inside another agent's own data folder (`~/.codex/visualizations/<uuid>` etc.).
+fn in_agent_data(p: &Path) -> bool {
+    let h = home();
+    [h.join(".codex"), h.join(".claude"), h.join(".local").join("share").join("opencode"), h.join(".config").join("opencode")].iter().any(|d| p.starts_with(d))
 }
 
 /// Project folders a tool has worked in.
@@ -173,7 +179,7 @@ fn claude_line_to_messages(v: &Value, at: i64) -> Vec<Message> {
                 }
             }
             "thinking" => {
-                if let Some(t) = b.get("thinking").and_then(|t| t.as_str()).or_else(|| b.get("text").and_then(|t| t.as_str())) {
+                if let Some(t) = b.get("thinking").and_then(|t| t.as_str()).or_else(|| b.get("text").and_then(|t| t.as_str())).filter(|t| !t.trim().is_empty()) {
                     text_parts.push(Part::Thinking { text: t.to_string() });
                 }
             }
@@ -626,9 +632,18 @@ impl Engine {
         let mut res = ImportResult { projects: 0, chats: 0, messages: 0, gateways: 0 };
         let store: &Store = &self.store;
         let before: BTreeSet<String> = store.projects()?.into_iter().map(|p| p.id).collect();
-        // Earlier versions imported `.git` folders as projects: drop those if they are empty.
+        // Earlier versions produced junk: chats titled "… ⤵" with raw tool noise, and projects
+        // for `.git` / agent data folders. Drop them; this import brings clean copies.
+        if chats {
+            for s in store.sessions(None)? {
+                if s.title.ends_with(" \u{2935}") {
+                    store.delete_session(&s.id)?;
+                }
+            }
+        }
         for p in store.projects()? {
-            if Path::new(&p.root).components().any(|c| c.as_os_str() == ".git") && store.sessions(Some(&p.id))?.is_empty() {
+            let r = Path::new(&p.root);
+            if (r.components().any(|c| c.as_os_str() == ".git") || in_agent_data(r)) && store.sessions(Some(&p.id))?.is_empty() {
                 store.remove_project(&p.id)?;
             }
         }
