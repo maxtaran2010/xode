@@ -148,7 +148,7 @@ pub fn search(kb: &Kb, sel: &Sel, q: &str, opts: &SearchOpts) -> Vec<Hit> {
         let mut lists: Vec<(f64, Vec<i64>)> = vec![];
         if !ts.is_empty() {
             let fq = ts.join(" ");
-            let c = st.conn.lock();
+            let c = st.read.lock();
             let fts: Vec<i64> = c
                 .query_map(
                     &format!(
@@ -188,7 +188,7 @@ pub fn search(kb: &Kb, sel: &Sel, q: &str, opts: &SearchOpts) -> Vec<Hit> {
             if !pre.is_empty() {
                 let idl = pre.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",");
                 let v: Vec<(i64, f64)> = st
-                    .conn
+                    .read
                     .lock()
                     .query_map(
                         &format!(
@@ -233,7 +233,7 @@ pub fn search(kb: &Kb, sel: &Sel, q: &str, opts: &SearchOpts) -> Vec<Hit> {
 
 fn chunk_has_tag(st: &KbStore, chunk: i64, tag: &str) -> bool {
     let t = tag.trim().trim_start_matches('#').to_lowercase();
-    st.conn
+    st.read
         .lock()
         .scalar::<i64>(
             "SELECT 1 FROM chunks c JOIN notes n ON n.id = c.note WHERE c.id=?1 AND n.tags LIKE ?2",
@@ -245,7 +245,7 @@ fn chunk_has_tag(st: &KbStore, chunk: i64, tag: &str) -> bool {
 }
 
 fn hit(st: &Arc<KbStore>, chunk: i64, score: f64, ts: &[String]) -> Option<Hit> {
-    let c = st.conn.lock();
+    let c = st.read.lock();
     let (note, heading, a, b, tokens, text, title, nt, src, rel, layer): (
         i64,
         String,

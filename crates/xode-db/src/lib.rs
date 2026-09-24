@@ -232,7 +232,20 @@ impl Connection {
         let db = block_on(b.experimental_index_method(true).build())?;
         let conn = db.connect()?;
         let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
-        Ok(Self { conn, _db: db, read_only: false })
+        let c = Self { conn, _db: db, read_only: false };
+        // 256 MB page cache: the security KB is ~1.6 GB, and cold reads dominate search.
+        let _ = c.execute_batch("PRAGMA cache_size=-262144");
+        Ok(c)
+    }
+
+    /// A second connection to the same database (shares the in-process page cache and WAL).
+    /// Used for reads that must not wait behind a writer holding the main connection.
+    pub fn sibling(&self) -> Result<Self> {
+        let conn = self._db.connect()?;
+        let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+        let c = Self { conn, _db: self._db.clone(), read_only: self.read_only };
+        let _ = c.execute_batch("PRAGMA cache_size=-262144");
+        Ok(c)
     }
 
     /// True when opened by [`Connection::open_shared`] while another process owns the file.

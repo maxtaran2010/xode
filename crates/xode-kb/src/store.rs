@@ -182,6 +182,9 @@ pub struct KbStore {
     memory_dir: PathBuf,
     memory_layer: Layer,
     pub(crate) conn: Mutex<Connection>,
+    /// A second connection used only for reads (search, stats) so they never wait behind the
+    /// write/embed path holding `conn`. Falls back to `conn` if a sibling can't be opened.
+    pub(crate) read: Mutex<Connection>,
     owner: bool,
     pub(crate) bits: RwLock<BitIndex>,
     pub(crate) hub: Arc<EmbedHub>,
@@ -268,11 +271,17 @@ impl KbStore {
         if owner {
             init_db(&conn)?;
         }
+        // Prefer a sibling (shares the page cache); fall back to a fresh read-only handle.
+        let read = match conn.sibling() {
+            Ok(c) => c,
+            Err(_) => Connection::open_shared(db_path)?,
+        };
         let st = Arc::new(KbStore {
             prefix,
             memory_dir: memory_dir.to_path_buf(),
             memory_layer,
             conn: Mutex::new(conn),
+            read: Mutex::new(read),
             owner,
             bits: RwLock::new(BitIndex::default()),
             hub,
@@ -400,7 +409,7 @@ impl KbStore {
         }
         let mut m: HashMap<i64, SrcStats> = HashMap::new();
         {
-            let c = self.conn.lock();
+            let c = self.read.lock();
             let _ = c.for_each("SELECT source, COUNT(*), SUM(size) FROM notes GROUP BY source", (), |r| {
                 let e = m.entry(r.get(0).unwrap_or(0)).or_default();
                 (e.notes, e.bytes) = (r.get(1).unwrap_or(0), r.get(2).unwrap_or(0));
@@ -1015,7 +1024,7 @@ impl KbStore {
 
     pub fn note(&self, id: &str) -> Option<NoteView> {
         let nid = self.parse_id(id)?;
-        let c = self.conn.lock();
+        let c = self.read.lock();
         let (source, rel, title, tags, summary, tokens, outline): (i64, String, String, String, String, u32, String) = c
             .query_row(
                 "SELECT source, path, title, tags, summary, tokens, outline FROM notes WHERE id=?1",
