@@ -8704,7 +8704,7 @@ dependencies = [
 
 [[package]]
 name = "xode-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8718,7 +8718,7 @@ dependencies = [
 
 [[package]]
 name = "xode-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8747,7 +8747,7 @@ dependencies = [
 
 [[package]]
 name = "xode-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -8758,7 +8758,7 @@ dependencies = [
 
 [[package]]
 name = "xode-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -8775,7 +8775,7 @@ dependencies = [
 
 [[package]]
 name = "xode-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8805,7 +8805,7 @@ dependencies = [
 
 [[package]]
 name = "xode-index"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8838,7 +8838,7 @@ dependencies = [
 
 [[package]]
 name = "xode-kb"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8863,7 +8863,7 @@ dependencies = [
 
 [[package]]
 name = "xode-net"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8887,7 +8887,7 @@ dependencies = [
 
 [[package]]
 name = "xode-tools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
