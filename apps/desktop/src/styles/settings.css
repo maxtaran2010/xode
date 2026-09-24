@@ -97,10 +97,10 @@
 .set-card {
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  background: rgba(255, 255, 255, 0.018);
+  background: var(--panel-solid);
 }
-:root[data-scheme="light"] .set-card {
-  background: #fff;
+:root[data-backdrop="on"] .set-card {
+  background: var(--panel);
 }
 .field {
   display: flex;
