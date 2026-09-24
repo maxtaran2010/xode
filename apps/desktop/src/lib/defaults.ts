@@ -2,7 +2,7 @@
 import type { Config } from "./types";
 
 export const DEFAULT_COMPACT_PROMPT =
-  "CONTEXT LIMIT REACHED. Stop working and write a handoff for yourself. The context will be cleared and you will continue from this handoff only. Do not call tools.\nReply with exactly:\n<path>\n- up to {path_lines} one-line bullets: what you did since the last handoff (files changed, key findings, commands that worked). Terse, no filler.\n</path>\n<state>\ngoal: <one line>\ndone: <one line>\nnow: <what you were doing at the cut>\nnext: <next 1-3 concrete steps>\nnotes: <facts needed to continue: paths, symbols, decisions, gotchas>\n</state>\nMax {state_words} words inside <state>.";
+  "CONTEXT LIMIT REACHED. Stop working and write a handoff for yourself. The context will be cleared and you will continue from this handoff only. Do not call tools.\nReply with exactly:\n<path>\n- up to {path_lines} one-line bullets: what you did since the last handoff (files changed, key findings, commands that worked). Terse, no filler.\n</path>\n<state>\nuser: <what the user wants right now, one line in their terms; if they moved on to a new task, only the newest one>\ngoal: <one line>\ndone: <one line>\nnow: <what you were doing at the cut>\nnext: <next 1-3 concrete steps>\nnotes: <facts needed to continue: paths, symbols, decisions, gotchas>\n</state>\nMax {state_words} words inside <state>.";
 
 export const DEFAULT_SEED_TEMPLATE =
   "[Context was compacted. Continue the task from here without redoing finished work. Do not re-read files listed in the working set unless you must edit a part you have not seen.]\n\n{request}\n\n## Project path (.xode/PATH.md)\n{path}\n\n## State\n{state}\n\n{goal}\n\n{working_set}";

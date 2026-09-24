@@ -81,7 +81,7 @@ export default function CompactionPage() {
         <Field label="Repo map">
           <Toggle value={k().include_repo_map} onChange={(v) => set("include_repo_map", v)} />
         </Field>
-        <Field label="Keep original request">
+        <Field label="User intent">
           <Toggle value={k().keep_original_request} onChange={(v) => set("keep_original_request", v)} />
         </Field>
         <Field label="Fold old entries">

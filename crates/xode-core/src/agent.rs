@@ -781,22 +781,20 @@ impl Runtime {
         sess.state = handoff.state.clone();
         self.state.lock().segment = sess.segment;
 
-        let request = if cfg.keep_original_request {
-            all.iter()
-                .find(|m| m.role == Role::User && m.kind == MsgKind::Normal)
-                .map(|m| context::clip(&m.text(), 1500))
-                .unwrap_or_default()
-        } else {
+        // What the user wants now, as summarized in the handoff (`user:` line). Verbatim old
+        // prompts are not replayed: after a topic switch they would drag the model back.
+        let (intent, state_rest) = split_intent(&handoff.state);
+        let request = if !cfg.keep_original_request {
             String::new()
+        } else if !intent.is_empty() {
+            format!("## User wants\n{intent}")
+        } else {
+            all.iter()
+                .rev()
+                .find(|m| m.role == Role::User && m.kind == MsgKind::Normal && m.segment == old_segment && m.text().trim().len() > 12)
+                .map(|m| format!("## User wants\n{}", context::clip(m.text().trim(), 300)))
+                .unwrap_or_default()
         };
-        let latest_user = all
-            .iter()
-            .rev()
-            .find(|m| m.role == Role::User && m.kind == MsgKind::Normal && m.segment == old_segment)
-            .map(|m| m.text())
-            .filter(|t| !request.contains(t.trim()))
-            .map(|t| format!("## Latest user message\n{}", context::clip(&t, 1200)))
-            .unwrap_or_default();
         let ws = if cfg.include_working_set {
             let touched: Vec<_> = self.state.lock().touched.values().cloned().collect();
             compaction::working_set(&touched, &root, self.outliner.as_deref(), cfg.working_set_max_files, 1800)
@@ -813,19 +811,15 @@ impl Runtime {
             .rev()
             .map(|m| context::render_brief(m, 600))
             .collect();
-        let mut seed_text = compaction::render_seed(
+        let seed_text = compaction::render_seed(
             &cfg.seed_template,
             &request,
             &new_md,
-            &handoff.state,
+            &state_rest,
             sess.goal.as_deref(),
             &ws,
             &recent,
         );
-        if !latest_user.is_empty() {
-            seed_text.push_str("\n\n");
-            seed_text.push_str(&latest_user);
-        }
         let mut seed = Message::user(seed_text).with_kind(MsgKind::Seed);
         seed.segment = sess.segment;
         self.persist(all, seed.clone());
@@ -1057,4 +1051,27 @@ fn safety_cap(s: &str, max_tokens: u64) -> String {
         v[v.len().saturating_sub(keep)..].iter().collect()
     };
     format!("{head}\n…[{} tokens omitted]…\n{tail}", t.saturating_sub(max_tokens))
+}
+
+/// Split the handoff's `user:` line (current intent) from the rest of the state.
+fn split_intent(state: &str) -> (String, String) {
+    let mut intent = String::new();
+    let mut rest = vec![];
+    for l in state.lines() {
+        match l.trim().strip_prefix("user:") {
+            Some(v) if intent.is_empty() => intent = v.trim().to_string(),
+            _ => rest.push(l),
+        }
+    }
+    (intent, rest.join("\n"))
+}
+
+#[cfg(test)]
+mod intent_tests {
+    #[test]
+    fn splits_user_line() {
+        let (i, rest) = super::split_intent("user: build the shop site\ngoal: site\nnext: header");
+        assert_eq!(i, "build the shop site");
+        assert_eq!(rest, "goal: site\nnext: header");
+    }
 }
