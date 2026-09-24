@@ -607,3 +607,22 @@
   height: 26px;
   font-size: 11.5px !important;
 }
+
+/* vision toggle in the model list */
+.vis-toggle {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  opacity: 0.55;
+  transition: opacity var(--ease), background var(--ease), color var(--ease), border-color var(--ease);
+}
+.vis-toggle:hover {
+  opacity: 0.85;
+}
+.vis-toggle.on {
+  opacity: 1;
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-2) 12%, transparent);
+}

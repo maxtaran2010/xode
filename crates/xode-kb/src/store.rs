@@ -912,7 +912,7 @@ impl KbStore {
             }
             let rows: Vec<(i64, i64, String, String, String)> = self.conn.lock().query_map(
                 "SELECT c.id, c.source, n.title, c.heading, c.text FROM chunks c JOIN notes n ON n.id = c.note
-                 WHERE c.id > ?1 AND c.emb IS NULL ORDER BY c.id LIMIT 32",
+                 WHERE c.id > ?1 AND c.emb IS NULL ORDER BY c.id LIMIT 128",
                 params![cursor],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
             )?;
@@ -933,17 +933,29 @@ impl KbStore {
                 .collect();
             let vecs = e.embed(&texts, false)?;
             {
-                let c = self.conn.lock();
-                c.transaction(|c| {
-                    for ((id, _, _, _, _), v) in rows.iter().zip(&vecs) {
-                        let bits = sign_bits(v);
-                        c.execute(
-                            "UPDATE chunks SET emb=vector32(?2), bits=?3 WHERE id=?1",
-                            params![*id, xode_db::f32_blob(v), bits_to_bytes(&bits)],
-                        )?;
+                // One UPDATE per batch (Turso FTS builds a segment per statement; per-row
+                // updates were the throughput bottleneck). id literals are safe (i64).
+                let mut emb_cases = String::new();
+                let mut bit_cases = String::new();
+                let mut ps: Vec<xode_db::Value> = Vec::with_capacity(rows.len() * 2);
+                let mut ids = String::new();
+                // emb CASE params come first (statement order), then bits CASE params.
+                for ((id, _, _, _, _), v) in rows.iter().zip(&vecs) {
+                    emb_cases.push_str(&format!(" WHEN {id} THEN vector32(?)"));
+                    ps.push(xode_db::Value::Blob(xode_db::f32_blob(v)));
+                    if !ids.is_empty() {
+                        ids.push(',');
                     }
-                    Ok(())
-                })?;
+                    ids.push_str(&id.to_string());
+                }
+                for ((id, _, _, _, _), v) in rows.iter().zip(&vecs) {
+                    bit_cases.push_str(&format!(" WHEN {id} THEN ?"));
+                    ps.push(xode_db::Value::Blob(bits_to_bytes(&sign_bits(v))));
+                }
+                let sql = format!(
+                    "UPDATE chunks SET emb = CASE id{emb_cases} END, bits = CASE id{bit_cases} END WHERE id IN ({ids})"
+                );
+                self.conn.lock().execute(&sql, ps)?;
             }
             {
                 let mut b = self.bits.write();

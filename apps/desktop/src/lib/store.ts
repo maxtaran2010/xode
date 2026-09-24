@@ -470,6 +470,7 @@ async function ensureSession(): Promise<string | null> {
 export async function send(text: string, attachments: Attachment[]) {
   const trimmed = text.trim();
   if (!trimmed && !attachments.length) return false;
+  if (trimmed) pushPromptHistory(trimmed);
   try {
     const sid = await ensureSession();
     if (!sid) return false;
@@ -540,8 +541,23 @@ export async function rewindTo(messageId: string, restoreFiles: boolean) {
   if (!sid) return;
   try {
     const r = await api.rewind(sid, messageId, restoreFiles);
-    setState("live", sid, emptyLive());
-    await openSession(sid);
+    // Trim the tail in place instead of clearing + reloading the whole chat: `reconcile`
+    // keyed by id keeps the surviving messages' DOM mounted, so nothing re-highlights (no freeze).
+    const [msgs, ctx, stats] = await Promise.all([
+      api.messages(sid),
+      api.contextView(sid).catch(() => null),
+      api.stats(sid).catch(() => null),
+    ]);
+    const items = messagesToItems(msgs, ctx?.segments ?? [], false);
+    batch(() => {
+      ensureLive(sid);
+      setState("live", sid, "items", reconcile(items, { key: "id" }));
+      setState("live", sid, produce((s) => {
+        s.running = false;
+        s.loaded = true;
+        if (stats) s.stats = stats;
+      }));
+    });
     if (r.text) {
       setState("ui", "composerText", r.text);
       window.dispatchEvent(new CustomEvent("xode:focus-composer"));
@@ -595,6 +611,18 @@ export async function setModel(gatewayId: string, model: string) {
     await api.setModel(sid, gatewayId, model).catch(fail);
     setState("sessions", (s) => s.id === sid, { gateway: gatewayId, model });
   }
+}
+
+// ---------- prompt history (up/down in the composer)
+
+const HISTORY_KEY = "promptHistory";
+let promptHist: string[] = saved(HISTORY_KEY, [] as string[]);
+export const promptHistory = (): string[] => promptHist;
+export function pushPromptHistory(text: string) {
+  const t = text.trim();
+  if (!t) return;
+  promptHist = [...promptHist.filter((h) => h !== t), t].slice(-200);
+  persist(HISTORY_KEY, promptHist);
 }
 
 export const EFFORTS = [

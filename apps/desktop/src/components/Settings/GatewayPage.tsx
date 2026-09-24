@@ -106,9 +106,14 @@ function GatewayCard(props: { g: Gateway; index: number; test: TestState; onTest
                 <div class="models-row">
                   <span class="mono">{m.id}</span>
                   <span class="models-ctx">
-                    <Show when={m.vision}>
-                      <span class="badge subtle">vision</span>
-                    </Show>
+                    <button
+                      class="badge vis-toggle"
+                      classList={{ on: m.vision }}
+                      title="Toggle vision (accept image input)"
+                      onClick={() => up((x) => (x.models[i()].vision = !x.models[i()].vision))}
+                    >
+                      vision
+                    </button>
                     <NumberField value={m.context} onChange={(v) => up((x) => (x.models[i()].context = v ?? 0))} step={1024} width={96} />
                   </span>
                 </div>

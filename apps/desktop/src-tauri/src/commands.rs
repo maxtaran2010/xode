@@ -94,8 +94,8 @@ pub fn steer(engine: Eng, session_id: String) {
 }
 
 #[tauri::command]
-pub fn rewind(engine: Eng, session_id: String, message_id: String, restore_files: bool) -> Res<xode_engine::RewindResult> {
-    map!(engine.rewind(&session_id, &message_id, restore_files))
+pub async fn rewind(engine: Eng<'_>, session_id: String, message_id: String, restore_files: bool) -> Res<xode_engine::RewindResult> {
+    blocking(engine, move |e| e.rewind(&session_id, &message_id, restore_files)).await
 }
 
 #[tauri::command]

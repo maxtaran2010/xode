@@ -5,8 +5,24 @@ use std::time::{Duration, Instant};
 use xode_kb::{EmbedHub, KbStore, Layer};
 fn main() {
     let dir = xode_core::config::data_dir();
-    let cfg = xode_core::config::Knowledge::default(); // built-in embedder
-    let hub = EmbedHub::new(&xode_core::config::Config { knowledge: cfg.clone(), ..Default::default() });
+    // Optional GPU path: --url <embeddings endpoint> [--model <name>] uses a gateway embedder.
+    let args: Vec<String> = std::env::args().collect();
+    let arg = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1)).cloned();
+    let url = arg("--url");
+    let model = arg("--model").unwrap_or_else(|| "embed".into());
+    let (cfg, full) = match &url {
+        Some(u) => {
+            let gw = xode_core::config::Gateway { id: "gpu".into(), name: "gpu".into(), url: u.clone(), enabled: true, ..Default::default() };
+            let k = xode_core::config::Knowledge { embedder: "gateway".into(), gateway: "gpu".into(), gateway_model: model.clone(), ..Default::default() };
+            (k.clone(), xode_core::config::Config { gateways: vec![gw], knowledge: k, ..Default::default() })
+        }
+        None => {
+            let k = xode_core::config::Knowledge::default();
+            (k.clone(), xode_core::config::Config { knowledge: k, ..Default::default() })
+        }
+    };
+    println!("embedder: {}", url.as_deref().unwrap_or("builtin (CPU)"));
+    let hub = EmbedHub::new(&full);
     let store = KbStore::open('g', &dir.join("kb.db"), &dir.join("memory"), Layer::Memory, hub, &cfg).expect("open");
     if !store.is_owner() {
         eprintln!("Xode holds the KB db; close it first.");

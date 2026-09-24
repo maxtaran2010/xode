@@ -10,6 +10,7 @@ import {
   effort,
   EFFORTS,
   openSettings,
+  promptHistory,
   selectProject,
   send,
   setEffort,
@@ -115,6 +116,8 @@ export default function Composer() {
   let ta!: HTMLTextAreaElement;
   const [popup, setPopup] = createSignal<Popup | null>(null);
   const [sel, setSel] = createSignal(0);
+  let histIdx = -1; // -1 = editing current draft; otherwise index into promptHistory()
+  let histDraft = "";
   const text = () => state.ui.composerText;
   const setText = (v: string) => setState("ui", "composerText", v);
   const running = () => !!activeLive()?.running;
@@ -211,6 +214,7 @@ export default function Composer() {
     const t = text();
     const atts = state.ui.attachments;
     if (!t.trim() && !atts.length) return;
+    histIdx = -1;
     setText("");
     setState("ui", "attachments", []);
     setPopup(null);
@@ -245,6 +249,34 @@ export default function Composer() {
         setPopup(null);
         return;
       }
+    }
+    // Prompt history: Up on the first line / Down on the last line; otherwise the arrow
+    // moves the caret within the text as usual.
+    const v = ta.value;
+    const caret = ta.selectionStart ?? v.length;
+    const hist = promptHistory();
+    if (e.key === "ArrowUp" && hist.length && v.slice(0, caret).indexOf("\n") === -1) {
+      e.preventDefault();
+      if (histIdx === -1) {
+        histDraft = v;
+        histIdx = hist.length;
+      }
+      histIdx = Math.max(0, histIdx - 1);
+      setText(hist[histIdx]);
+      queueMicrotask(() => ta.setSelectionRange(ta.value.length, ta.value.length));
+      return;
+    }
+    if (e.key === "ArrowDown" && histIdx !== -1 && v.slice(caret).indexOf("\n") === -1) {
+      e.preventDefault();
+      histIdx += 1;
+      if (histIdx >= hist.length) {
+        histIdx = -1;
+        setText(histDraft);
+      } else {
+        setText(hist[histIdx]);
+      }
+      queueMicrotask(() => ta.setSelectionRange(ta.value.length, ta.value.length));
+      return;
     }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -380,6 +412,7 @@ export default function Composer() {
           placeholder="Ask anything"
           value={text()}
           onInput={(e) => {
+            histIdx = -1;
             setText(e.currentTarget.value);
             updatePopup();
           }}
