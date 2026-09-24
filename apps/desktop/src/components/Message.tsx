@@ -1,8 +1,8 @@
 import { createSignal, For, Match, Show, Switch } from "solid-js";
-import { ChevronRight, CircleAlert, ShieldAlert } from "lucide-solid";
+import { ChevronRight, CircleAlert, ListChecks, ShieldAlert } from "lucide-solid";
 import { fmtMs, fmtTokens, fmtTps } from "../lib/format";
 import type { Block, Item, ToolBlock } from "../lib/session";
-import { replyPermission } from "../lib/store";
+import { answerPlan, replyPermission } from "../lib/store";
 import { toolLabel } from "../lib/tools";
 import { Collapse } from "../lib/motion";
 import Markdown from "./Markdown";
@@ -182,6 +182,36 @@ function PermissionCard(props: { item: Of<"perm">; session: string }) {
   );
 }
 
+function PlanCard(props: { item: Of<"plan">; session: string }) {
+  const name = () => props.item.path.split("/").slice(-3).join("/");
+  return (
+    <div class="plan-card" classList={{ done: !!props.item.decision }}>
+      <div class="plan-head">
+        <ListChecks size={15} stroke-width={1.6} />
+        <span>Plan</span>
+        <span class="plan-path mono">{name()}</span>
+      </div>
+      <div class="plan-body">
+        <Markdown text={props.item.text} />
+      </div>
+      <Show
+        when={!props.item.decision}
+        fallback={<div class="perm-done">{props.item.decision === "build" ? "Building" : "Kept planning"}</div>}
+      >
+        <div class="perm-actions">
+          <span class="plan-ask">Switch to Normal mode and build it?</span>
+          <button class="btn ghost" onClick={() => answerPlan(props.session, props.item.id, "keep")}>
+            Keep planning
+          </button>
+          <button class="btn primary" onClick={() => answerPlan(props.session, props.item.id, "build")}>
+            Build
+          </button>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 export default function ItemView(props: { item: Item; next?: Item; session: string; running: boolean }) {
   const lastOfRun = () => props.next?.kind !== "assistant" && !(props.running && !props.next);
   return (
@@ -191,6 +221,7 @@ export default function ItemView(props: { item: Item; next?: Item; session: stri
       <Match when={props.item.kind === "compaction" && (props.item as Of<"compaction">)}>{(i) => <CompactionDivider item={i()} />}</Match>
       <Match when={props.item.kind === "goal" && (props.item as Of<"goal">)}>{(i) => <GoalDivider item={i()} />}</Match>
       <Match when={props.item.kind === "perm" && (props.item as Of<"perm">)}>{(i) => <PermissionCard item={i()} session={props.session} />}</Match>
+      <Match when={props.item.kind === "plan" && (props.item as Of<"plan">)}>{(i) => <PlanCard item={i()} session={props.session} />}</Match>
       <Match when={props.item.kind === "notice" && (props.item as Extract<Item, { kind: "notice" | "error" }>)}>{(i) => <div class="notice">{i().text}</div>}</Match>
       <Match when={props.item.kind === "error" && (props.item as Extract<Item, { kind: "notice" | "error" }>)}>
         {(i) => (

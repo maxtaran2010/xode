@@ -20,6 +20,7 @@ const BUILTIN: &[(&str, &str, &str)] = &[
     ("mode", "[plan|normal]", "Switch mode"),
     ("effort", "[auto|off|low|medium|high]", "Reasoning effort"),
     ("plan", "", "Toggle plan mode"),
+    ("build", "", "Switch to normal mode and implement the plan"),
     ("context", "", "Context usage"),
     ("tokens", "", "Token totals"),
     ("init", "", "Write project brief"),
@@ -257,6 +258,17 @@ pub async fn run(e: &Arc<Engine>, sid: &str, line: &str) -> Result<CommandResult
                 t.push_str(&format!("\n  {:<13}{}", sec.label, k(sec.tokens)));
             }
             notice(t)
+        }
+        "build" => {
+            let p = e.project_of(sid)?;
+            let path = xode_tools::plan_path(Path::new(&p.root), sid);
+            if !path.exists() {
+                return notice("no plan yet");
+            }
+            e.set_mode(sid, Mode::Normal)?;
+            let rel = path.strip_prefix(&p.root).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+            e.send(sid, format!("Implement the plan in `{rel}` step by step."), vec![]).await?;
+            Ok(CommandResult::Done)
         }
         "init" => {
             let p = e.project_of(sid)?;

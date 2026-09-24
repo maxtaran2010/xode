@@ -69,6 +69,7 @@ export type AgentEvent =
   | { type: "queue"; session: string; items: QueuedMsg[] }
   | { type: "command_done"; session: string; result: CommandResult }
   | { type: "finished"; session: string; stopped: boolean; error: boolean }
+  | { type: "plan_ready"; session: string; path: string; text: string }
   | { type: "notice"; session: string; text: string }
   | { type: "error"; session: string; text: string }
   | { type: "kb_progress"; session: string; source: string; stage: KbStage; done: number; total: number };

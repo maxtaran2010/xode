@@ -559,6 +559,9 @@ export function createMockBackend(): Backend {
       const s = sessions.find((x) => x.id === sid);
       if (s) s.updated_at = now();
       void run(sid, text);
+      if (s?.mode === "plan") {
+        setTimeout(() => emit({ type: "plan_ready", session: sid, path: "/work/app/.xode/plans/a1b2c3d4.md", text: "## Plan\n1. Add `Session.goal` field in `crates/xode-core/src/store.rs`\n2. Persist it in `save_session`\n3. Show the goal chip in `Composer.tsx`\n4. Tests: `store::goal_roundtrip`" }), 2500);
+      }
     },
     steer: async (sid) => {
       const q = queues.get(sid) ?? [];

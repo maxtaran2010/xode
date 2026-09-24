@@ -316,6 +316,9 @@ impl Engine {
         if let Some(t) = kb_tool {
             tools.add(t);
         }
+        if sess.mode == Mode::Plan {
+            tools.add(xode_tools::plan_tool());
+        }
         let rt = self.srt(session_id);
         let cancel = rt.cancel.lock().clone().unwrap_or_default();
         Ok(Runtime {
@@ -459,12 +462,34 @@ impl Engine {
     /// Ends a run: continues with queued items unless the user stopped, then reports completion.
     pub(crate) async fn after_run(self: &Arc<Self>, sid: &str, error: bool) {
         let stopped = self.srt(sid).user_stopped.load(Ordering::SeqCst);
+        let started = *self.srt(sid).run_started.lock();
         self.finish_run(sid);
+        if !stopped && !error {
+            self.offer_plan(sid, started);
+        }
         if !stopped {
             self.flush_queue(sid).await;
         }
         if !self.is_running(sid) {
             self.emit(AgentEvent::Finished { session: sid.into(), stopped, error });
+        }
+    }
+
+    /// Plan mode: if this run wrote the plan, ask the frontend to offer building it.
+    fn offer_plan(&self, sid: &str, started: i64) {
+        let Ok(s) = self.session(sid) else { return };
+        if s.mode != Mode::Plan {
+            return;
+        }
+        let Ok(p) = self.project(&s.project_id) else { return };
+        let path = xode_tools::plan_path(Path::new(&p.root), sid);
+        let fresh = std::fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .is_some_and(|d| d.as_millis() as i64 >= started);
+        if let (true, Ok(text)) = (fresh, std::fs::read_to_string(&path)) {
+            self.emit(AgentEvent::PlanReady { session: sid.into(), path: path.to_string_lossy().replace('\\', "/"), text });
         }
     }
 
@@ -726,6 +751,9 @@ impl Engine {
         let (cfg, kb_tool) = self.kb_runtime(&cfg, &project, &sess);
         if let Some(t) = kb_tool {
             reg.add(t);
+        }
+        if sess.mode == Mode::Plan {
+            reg.add(xode_tools::plan_tool());
         }
         let specs = reg.specs();
 

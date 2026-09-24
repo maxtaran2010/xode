@@ -48,6 +48,7 @@ export type Item =
     }
   | { kind: "goal"; id: string; done: boolean; reason: string }
   | { kind: "perm"; id: string; tool: string; summary: string; decision: PermDecision | null }
+  | { kind: "plan"; id: string; path: string; text: string; decision: "build" | "keep" | null }
   | { kind: "notice" | "error"; id: string; text: string };
 
 export interface SessionLive {
@@ -326,6 +327,11 @@ export function applyEvent(s: SessionLive, ev: AgentEvent): void {
     case "permission_ask":
       s.items.push({ kind: "perm", id: ev.req_id, tool: ev.tool, summary: ev.summary, decision: null });
       s.activity = "Waiting for approval…";
+      break;
+    case "plan_ready":
+      // One open offer at a time: older unanswered ones are superseded.
+      for (const it of s.items) if (it.kind === "plan" && !it.decision) it.decision = "keep";
+      s.items.push({ kind: "plan", id: lid("plan"), path: ev.path, text: ev.text, decision: null });
       break;
     case "notice":
       s.items.push({ kind: "notice", id: lid("notice"), text: ev.text });

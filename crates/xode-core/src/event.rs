@@ -59,6 +59,8 @@ pub enum AgentEvent {
     CommandDone { session: String, result: Value },
     /// Work finished (queue drained). `stopped`: the user stopped it.
     Finished { session: String, stopped: bool, error: bool },
+    /// Plan mode run ended with a fresh plan: offer to build it (`/build`).
+    PlanReady { session: String, path: String, text: String },
     Notice { session: String, text: String },
     Error { session: String, text: String },
     /// Knowledge-base indexing progress (not tied to a session: `session` is empty).
@@ -89,6 +91,7 @@ impl AgentEvent {
             | Queue { session, .. }
             | CommandDone { session, .. }
             | Finished { session, .. }
+            | PlanReady { session, .. }
             | Notice { session, .. }
             | Error { session, .. }
             | KbProgress { session, .. } => session,

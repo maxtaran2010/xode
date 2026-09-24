@@ -441,6 +441,7 @@ impl ChatView {
                 }
             }
             AgentEvent::PermissionAsk { .. } => {}
+            AgentEvent::PlanReady { path, .. } => self.notice(format!("plan ready: {path} · /build to implement"), Level::Info),
             AgentEvent::Queue { items, .. } => self.queue = items.clone(),
             AgentEvent::CommandDone { .. } | AgentEvent::Finished { .. } | AgentEvent::KbProgress { .. } => {}
             AgentEvent::State { running, .. } => {

@@ -14,7 +14,7 @@ Context is small and precious:
 Verify your work (build/tests) when possible. If blocked, try another approach before asking the user.
 When you create something the user should open (a page, image, report, document), link it in your reply: [name](path/to/file.html), or ![alt](path/to/image.png) to show an image inline. Paths may be relative to the project.";
 
-pub const PLAN_PROMPT: &str = "PLAN MODE: you may only read and research (no edits, no state-changing commands). End with a concise, numbered implementation plan.";
+pub const PLAN_PROMPT: &str = "PLAN MODE: only read and research (no edits, no state-changing commands). Save the implementation plan with the `plan` tool: concise, numbered steps with files to touch. When the plan is complete, stop; the user will be asked to build it.";
 
 pub struct Env<'a> {
     pub project_root: &'a str,

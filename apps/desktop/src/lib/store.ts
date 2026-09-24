@@ -631,6 +631,14 @@ export async function stop() {
   if (sid) await api.cancel(sid).catch(fail);
 }
 
+/** Answer a plan-ready offer: build switches to normal mode and implements it (`/build`). */
+export async function answerPlan(sid: string, id: string, decision: "build" | "keep") {
+  setState("live", sid, "items", (i) => i.id === id, produce((i) => {
+    if (i.kind === "plan") i.decision = decision;
+  }));
+  if (decision === "build") await runCommand(sid, "/build");
+}
+
 export async function replyPermission(sid: string, reqId: string, decision: PermDecision) {
   setState("live", sid, "items", (i) => i.id === reqId, produce((i) => {
     if (i.kind === "perm") i.decision = decision;

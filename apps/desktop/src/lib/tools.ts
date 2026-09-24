@@ -12,6 +12,7 @@ import {
   Link,
   Plug,
   Search,
+  ListChecks,
   SquareTerminal,
   Wrench,
 } from "lucide-solid";
@@ -30,6 +31,7 @@ const ICONS: Record<string, Icon> = {
   web_fetch: Link,
   browser: AppWindow,
   kb: Library,
+  plan: ListChecks,
 };
 
 export function toolIcon(name: string): Icon {
@@ -84,6 +86,8 @@ export function toolSummary(name: string, args: unknown): string {
       return [pick("action"), pick("url", "selector", "text")].filter(Boolean).join(" ");
     case "kb":
       return [pick("action"), pick("q", "id", "title", "path", "tag")].filter(Boolean).join(" ");
+    case "plan":
+      return a.old != null ? "edit" : "write";
     default: {
       const first = Object.values(a).find((v) => typeof v === "string");
       return first ? String(first) : "";
@@ -119,6 +123,8 @@ export function toolActivity(name: string, args: unknown): string {
       return "Using browser…";
     case "kb":
       return "Searching knowledge…";
+    case "plan":
+      return "Writing plan…";
     case "":
       return "Thinking…";
     default:
