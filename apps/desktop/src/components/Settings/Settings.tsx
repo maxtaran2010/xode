@@ -1,12 +1,13 @@
 import { createEffect, createSignal, For, on, onCleanup, onMount, type Component } from "solid-js";
 import { Dynamic } from "solid-js/web";
-import { AppWindow, Bell, Coins, FoldVertical, Library, Palette, Plug, Server, Shield, SlidersHorizontal, Wrench, X } from "lucide-solid";
+import { AppWindow, Bell, Coins, DownloadCloud, FoldVertical, Library, Palette, Plug, Server, Shield, SlidersHorizontal, Wrench, X } from "lucide-solid";
 import { Switcher } from "../../lib/motion";
 import { setState, state, type SettingsPage } from "../../lib/store";
 import BrowserPage from "./BrowserPage";
 import CompactionPage from "./CompactionPage";
 import GatewayPage from "./GatewayPage";
 import GenerationPage from "./GenerationPage";
+import ImportPage from "./ImportPage";
 import KnowledgePage from "./KnowledgePage";
 import McpPage from "./McpPage";
 import NotificationsPage from "./NotificationsPage";
@@ -29,6 +30,7 @@ const PAGES: { id: SettingsPage; label: string; icon: Icon; page: Component }[] 
   { id: "tools", label: "Tools", icon: Wrench, page: ToolsPage },
   { id: "notifications", label: "Notifications", icon: Bell, page: NotificationsPage },
   { id: "theme", label: "Theme", icon: Palette, page: ThemePage },
+  { id: "import", label: "Import", icon: DownloadCloud, page: ImportPage },
 ];
 
 export default function Settings() {

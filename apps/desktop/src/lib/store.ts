@@ -19,7 +19,8 @@ export type SettingsPage =
   | "mcp"
   | "tools"
   | "notifications"
-  | "theme";
+  | "theme"
+  | "import";
 export type KbTab = "sources" | "notes" | "graph";
 
 export interface Toast {

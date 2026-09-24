@@ -1304,12 +1304,49 @@ fn insert_rows(c: &Connection, into: &str, rows: Vec<Vec<xode_db::Value>>) -> xo
     Ok(())
 }
 
+/// Test/ops helper: open a db file and run schema migration only (no workers). Hidden.
+#[doc(hidden)]
+pub fn migrate_at(path: &Path) -> Result<()> {
+    let c = Connection::open(path)?;
+    init_db(&c)?;
+    Ok(())
+}
+
+/// Upgrade the schema in place. Migrations preserve notes/chunks/embeddings where possible and
+/// only rebuild derived data; an unrecognized layout falls back to a clean rebuild.
+fn migrate(c: &Connection, from: i64) -> Result<()> {
+    let has = |t: &str| c.scalar::<String>("SELECT name FROM sqlite_master WHERE type='table' AND name=?1", params![t]).ok().flatten().is_some();
+    // v1 -> v2: `links` gained an `id` PRIMARY KEY. Keep everything else; copy existing links.
+    if from == 1 && has("notes") && has("chunks") {
+        let links_has_id = c
+            .query_map("SELECT name FROM pragma_table_info('links')", (), |r| r.get::<String>(0))
+            .map(|cols| cols.iter().any(|n| n == "id"))
+            .unwrap_or(false);
+        if !links_has_id {
+            let _ = c.execute_batch(
+                "ALTER TABLE links RENAME TO links_old_v1;
+                 CREATE TABLE links(id INTEGER PRIMARY KEY, src INTEGER NOT NULL, target TEXT NOT NULL, dst INTEGER);
+                 INSERT INTO links(src, target, dst) SELECT src, target, dst FROM links_old_v1;
+                 DROP TABLE links_old_v1;",
+            );
+            // If the rename path failed, make sure a usable links table exists.
+            if !has("links")
+                || !c.query_map("SELECT name FROM pragma_table_info('links')", (), |r| r.get::<String>(0)).map(|cols| cols.iter().any(|n| n == "id")).unwrap_or(false)
+            {
+                let _ = c.execute_batch("DROP TABLE IF EXISTS links_old_v1; DROP TABLE IF EXISTS links; CREATE TABLE links(id INTEGER PRIMARY KEY, src INTEGER NOT NULL, target TEXT NOT NULL, dst INTEGER);");
+            }
+        }
+        return Ok(());
+    }
+    // Unknown/older: rebuild derived tables (loses embeddings, but only for layouts we can't migrate).
+    c.execute_batch("DROP TABLE IF EXISTS chunks; DROP TABLE IF EXISTS notes; DROP TABLE IF EXISTS links; DROP TABLE IF EXISTS meta;")?;
+    Ok(())
+}
+
 fn init_db(c: &Connection) -> Result<()> {
-    if c.user_version() != SCHEMA_VERSION {
-        c.execute_batch(
-            "DROP TABLE IF EXISTS chunks; DROP TABLE IF EXISTS notes; DROP TABLE IF EXISTS links;
-             DROP TABLE IF EXISTS meta;",
-        )?;
+    let v = c.user_version();
+    if v != SCHEMA_VERSION {
+        migrate(c, v)?;
     }
     c.execute_batch(
         "CREATE TABLE IF NOT EXISTS sources(id INTEGER PRIMARY KEY, layer TEXT NOT NULL, name TEXT NOT NULL,
@@ -1338,4 +1375,39 @@ fn init_db(c: &Connection) -> Result<()> {
     }
     c.set_user_version(SCHEMA_VERSION)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod migrate_tests {
+    use super::*;
+
+    #[test]
+    fn v1_to_v2_preserves_notes_chunks_embeddings() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("kb.db");
+        {
+            // Build a v1-shaped db: links WITHOUT an id column, with data + an embedding.
+            let c = Connection::open(&p).unwrap();
+            c.execute_batch(
+                "CREATE TABLE sources(id INTEGER PRIMARY KEY, layer TEXT, name TEXT, path TEXT, default_on INTEGER, added INTEGER);
+                 CREATE TABLE notes(id INTEGER PRIMARY KEY, source INTEGER, path TEXT, title TEXT, key TEXT, tags TEXT, summary TEXT, tokens INTEGER, mtime INTEGER, size INTEGER, hash TEXT, outline TEXT);
+                 CREATE TABLE chunks(id INTEGER PRIMARY KEY, note INTEGER, source INTEGER, ord INTEGER, heading TEXT, line_start INTEGER, line_end INTEGER, tokens INTEGER, text TEXT, emb BLOB, bits BLOB);
+                 CREATE TABLE links(src INTEGER NOT NULL, target TEXT NOT NULL, dst INTEGER);
+                 CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);",
+            ).unwrap();
+            c.execute("INSERT INTO notes(id, source, path, title, key) VALUES (1,1,'a.md','A','a')", ()).unwrap();
+            c.execute("INSERT INTO chunks(id, note, source, ord, heading, text, emb, bits) VALUES (1,1,1,0,'','hello',vector32('[0.1,0.2,0.3,0.4]'),?1)", params![vec![1u8; 8]]).unwrap();
+            c.execute("INSERT INTO links(src, target, dst) VALUES (1,'a',1)", ()).unwrap();
+            c.set_user_version(1).unwrap();
+        }
+        // Reopen and migrate.
+        let c = Connection::open(&p).unwrap();
+        init_db(&c).unwrap();
+        assert_eq!(c.user_version(), SCHEMA_VERSION);
+        assert_eq!(c.scalar::<i64>("SELECT COUNT(*) FROM chunks WHERE emb IS NOT NULL", ()).unwrap(), Some(1), "embedding preserved");
+        assert_eq!(c.scalar::<i64>("SELECT COUNT(*) FROM notes", ()).unwrap(), Some(1), "notes preserved");
+        assert_eq!(c.scalar::<i64>("SELECT COUNT(*) FROM links WHERE dst IS NOT NULL", ()).unwrap(), Some(1), "links copied");
+        // links now has an id column and is usable by v2 queries.
+        c.execute("UPDATE links SET dst=2 WHERE id=1", ()).unwrap();
+    }
 }
