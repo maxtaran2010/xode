@@ -230,7 +230,7 @@ impl Engine {
     // ------------------------------------------------------------ index / tools
     pub(crate) fn index(&self, project: &Project) -> Option<Arc<ProjectIndex>> {
         let cfg = self.config_arc();
-        if !cfg.tools.index_enabled {
+        if !cfg.tools.index_enabled || !indexable_root(Path::new(&project.root)) {
             return None;
         }
         let mut m = self.indexes.lock();
@@ -1081,4 +1081,10 @@ fn dunce_canon(p: &Path) -> Result<PathBuf> {
     let c = std::fs::canonicalize(p)?;
     let s = c.to_string_lossy().to_string();
     Ok(PathBuf::from(s.strip_prefix(r"\\?\").unwrap_or(&s)))
+}
+
+/// Home and filesystem roots are never indexed: walking and watching them is slow and, on
+/// macOS, triggers privacy prompts for Documents / Desktop / Downloads.
+fn indexable_root(root: &Path) -> bool {
+    root.parent().is_some() && dirs::home_dir().map_or(true, |h| root != h)
 }

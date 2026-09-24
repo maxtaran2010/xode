@@ -278,3 +278,9 @@ export function handleCodeCopy(e: MouseEvent) {
   btn.innerHTML = CHECK_SVG;
   setTimeout(() => (btn.innerHTML = COPY_SVG), 1200);
 }
+
+/** Load the highlighter in the background so the first opened chat doesn't wait for it. */
+export function warmHighlighter() {
+  const idle = (window as { requestIdleCallback?: (f: () => void) => void }).requestIdleCallback ?? ((f: () => void) => setTimeout(f, 300));
+  idle(() => void getHighlighter().then(() => Promise.all(["ts", "rust", "python", "bash", "json"].map(loadLang))).catch(() => {}));
+}

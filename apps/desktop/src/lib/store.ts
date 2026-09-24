@@ -3,6 +3,7 @@ import { batch } from "solid-js";
 import { createStore, produce, reconcile } from "solid-js/store";
 import { api, notify, saveText, setWindowEffect, windowEffect } from "./api";
 import { debounce } from "./format";
+import { warmHighlighter } from "./markdown";
 import { applyEvent, emptyLive, messagesToItems, type SessionLive } from "./session";
 import { applyTheme } from "./theme";
 import type { AgentEvent, Attachment, CommandInfo, CommandResult, Config, KbOverview, KbProgress, Mode, PermDecision, Project, SessionInfo } from "./types";
@@ -307,6 +308,7 @@ export async function init() {
   applyTheme(config.theme, backdrop);
   loadCommands();
   loadKb();
+  warmHighlighter();
   if (!projects.length && !config.gateways.length) setState("ui", "onboarding", true);
 }
 
