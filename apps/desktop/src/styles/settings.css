@@ -750,3 +750,14 @@
   padding: 0 26px;
   font-size: 14px;
 }
+
+/* Import rows sit directly in a .set-card (which has no padding of its own). */
+.set-card .ob-src {
+  padding: 11px 14px;
+}
+.set-card .ob-src:first-of-type {
+  padding-top: 13px;
+}
+.set-card .ob-src:last-of-type {
+  padding-bottom: 13px;
+}
