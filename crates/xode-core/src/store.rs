@@ -231,6 +231,23 @@ impl Store {
         Ok(())
     }
 
+    /// Appends many messages in one transaction (bulk import).
+    pub fn append_messages(&self, session_id: &str, ms: &[Message]) -> Result<()> {
+        let mut c = self.conn.lock();
+        let tx = c.transaction()?;
+        let mut seq: i64 =
+            tx.query_row("SELECT COALESCE(MAX(seq),0) FROM messages WHERE session_id=?1", [session_id], |r| r.get(0))?;
+        for m in ms {
+            seq += 1;
+            tx.execute(
+                "INSERT OR REPLACE INTO messages(id,session_id,seq,data) VALUES(?1,?2,?3,?4)",
+                params![m.id, session_id, seq, serde_json::to_string(m)?],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn update_message(&self, m: &Message) -> Result<()> {
         self.conn.lock().execute("UPDATE messages SET data=?2 WHERE id=?1", params![m.id, serde_json::to_string(m)?])?;
         Ok(())

@@ -190,7 +190,7 @@ pub async fn test(g: &Gateway) -> TestResult {
                 "model": model, "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]
             }));
             if !g.api_key.is_empty() {
-                rb = rb.bearer_auth(&g.api_key);
+                rb = rb.bearer_auth(&g.api_key).header("x-api-key", &g.api_key);
             }
             rb.send().await
         }

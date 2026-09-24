@@ -314,6 +314,11 @@ export async function init() {
 export async function finishOnboarding() {
   setState("ui", "onboarding", false);
   persist("onboarded", true);
+  await reloadAll();
+}
+
+/** Re-read projects, sessions and config from the engine (after an import). */
+export async function reloadAll() {
   try {
     const [projects, sessions, config] = await Promise.all([api.projects(), api.sessions(null), api.config()]);
     batch(() => {

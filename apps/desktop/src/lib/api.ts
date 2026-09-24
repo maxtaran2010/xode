@@ -84,7 +84,7 @@ export interface Backend {
   kbEmbedRetry(): Promise<void>;
   setSessionKb(sessionId: string, off: string[]): Promise<void>;
   importDetect(): Promise<ImportSource[]>;
-  importRun(tool: string, projects: boolean, chats: boolean): Promise<ImportResult>;
+  importRun(tool: string, projects: boolean, chats: boolean, gateways: boolean): Promise<ImportResult>;
   onEvent(cb: (ev: AgentEvent) => void): () => void;
 }
 
@@ -150,7 +150,7 @@ async function tauriBackend(): Promise<Backend> {
     kbEmbedRetry: () => call("kb_embed_retry"),
     setSessionKb: (sessionId, off) => call("set_session_kb", { sessionId, off }),
     importDetect: () => call("import_detect"),
-    importRun: (tool, projects, chats) => call("import_run", { tool, projects, chats }),
+    importRun: (tool, projects, chats, gateways) => call("import_run", { tool, projects, chats, gateways }),
     onEvent: (cb) => {
       let un: (() => void) | undefined;
       let dead = false;

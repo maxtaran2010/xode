@@ -310,6 +310,6 @@ pub async fn import_detect(engine: Eng<'_>) -> Res<Vec<xode_engine::ImportSource
 }
 
 #[tauri::command]
-pub async fn import_run(engine: Eng<'_>, tool: String, projects: bool, chats: bool) -> Res<xode_engine::ImportResult> {
-    blocking(engine, move |e| e.import_run(&tool, projects, chats)).await
+pub async fn import_run(engine: Eng<'_>, tool: String, projects: bool, chats: bool, gateways: bool) -> Res<xode_engine::ImportResult> {
+    blocking(engine, move |e| e.import_run(&tool, projects, chats, gateways)).await
 }

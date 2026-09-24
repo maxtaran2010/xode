@@ -201,7 +201,7 @@ impl Provider for OpenAi {
         let client = http_client(req.generation.request_timeout_s);
         let mut rb = client.post(format!("{}/v1/chat/completions", self.base)).json(&body);
         if !self.key.is_empty() {
-            rb = rb.bearer_auth(&self.key);
+            rb = rb.bearer_auth(&self.key).header("x-api-key", &self.key);
         }
         let start = Instant::now();
         let resp = tokio::select! {

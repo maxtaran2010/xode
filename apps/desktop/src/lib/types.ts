@@ -505,10 +505,12 @@ export interface ImportSource {
   available: boolean;
   projects: number;
   chats: number;
+  gateways: number;
   path: string;
 }
 export interface ImportResult {
   projects: number;
   chats: number;
   messages: number;
+  gateways: number;
 }
