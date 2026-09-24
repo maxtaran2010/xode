@@ -681,6 +681,27 @@
   align-items: center;
   gap: 12px;
 }
+/* When a card has no description line, keep the control off the heading. */
+.ob-card-head + .ob-row,
+.ob-card-head + .ob-gw {
+  margin-top: 13px;
+}
+.ob-gw {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ob-gw .input {
+  height: 34px;
+}
+.ob-gw .grow {
+  flex: 1;
+  min-width: 0;
+}
+.ob-gw .input:not(.grow) {
+  width: 160px;
+}
 .ob-note {
   color: var(--muted);
   font-size: 12.5px;

@@ -1,8 +1,8 @@
 import { createResource, createSignal, Show } from "solid-js";
-import { BrainCircuit, Check, FolderGit2, Radar, Sparkles } from "lucide-solid";
+import { BrainCircuit, Check, FolderGit2, Plus, Radar, Sparkles } from "lucide-solid";
 import { api, pickFolder } from "../lib/api";
 import ImportRows from "./ImportRows";
-import { addProject, finishOnboarding, scanForModel, state } from "../lib/store";
+import { addProject, finishOnboarding, patchConfig, scanForModel, state, toast } from "../lib/store";
 import type { ImportSource } from "../lib/types";
 import { Logo, Spinner } from "./ui";
 
@@ -12,6 +12,30 @@ export default function Onboarding() {
   const [scanMsg, setScanMsg] = createSignal("");
 
   const gateways = () => state.config?.gateways.length ?? 0;
+  const [gwUrl, setGwUrl] = createSignal("");
+  const [gwKey, setGwKey] = createSignal("");
+  const [detecting, setDetecting] = createSignal(false);
+
+  const detect = async () => {
+    if (!gwUrl().trim()) return;
+    setDetecting(true);
+    try {
+      const g = await api.detectGateway(gwUrl().trim(), gwKey());
+      patchConfig((c) => {
+        if (!c.gateways.some((x) => x.url.replace(/\/+$/, "") === g.url.replace(/\/+$/, ""))) c.gateways.push(g);
+        if (!c.selected.gateway && g.models[0]) {
+          c.selected.gateway = g.id;
+          c.selected.model = g.models[0].id;
+        }
+      });
+      setGwUrl("");
+      setGwKey("");
+      setScanMsg(`Added ${g.name || g.url}`);
+    } catch (e) {
+      toast(String(e instanceof Error ? e.message : e), "error");
+    }
+    setDetecting(false);
+  };
 
   const scan = async () => {
     setScanning(true);
@@ -52,6 +76,16 @@ export default function Onboarding() {
             <Show when={scanMsg()}>
               <span class="ob-note">{scanMsg()}</span>
             </Show>
+          </div>
+          <div class="ob-gw">
+            <input class="input mono grow" placeholder="http://localhost:8080" value={gwUrl()} onInput={(e) => setGwUrl(e.currentTarget.value)} onKeyDown={(e) => e.key === "Enter" && detect()} />
+            <input class="input" type="password" placeholder="API key (optional)" value={gwKey()} onInput={(e) => setGwKey(e.currentTarget.value)} />
+            <button class="btn primary" onClick={detect} disabled={detecting() || !gwUrl().trim()}>
+              <Show when={detecting()} fallback={<Plus size={14} stroke-width={1.75} />}>
+                <Spinner size={13} />
+              </Show>
+              Add
+            </button>
           </div>
         </section>
 
