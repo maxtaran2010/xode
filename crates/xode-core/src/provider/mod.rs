@@ -64,6 +64,16 @@ pub fn http_client(timeout_s: u64) -> reqwest::Client {
 }
 
 /// Normalizes a base url: strips trailing `/` and a trailing `/v1`.
+/// Tokens per second, or 0 when the window is too short to mean anything (cloud APIs often
+/// deliver a whole turn in one burst, which would otherwise read as millions of tok/s).
+pub fn rate(tokens: u64, secs: f64) -> f64 {
+    if secs >= 0.25 {
+        tokens as f64 / secs
+    } else {
+        0.0
+    }
+}
+
 pub fn base_url(url: &str) -> String {
     let mut u = url.trim().trim_end_matches('/').to_string();
     if !u.starts_with("http://") && !u.starts_with("https://") {

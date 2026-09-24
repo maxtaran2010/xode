@@ -356,15 +356,11 @@ impl Provider for OpenAi {
         let decode_s = first.map(|f| (end - f).as_secs_f64()).unwrap_or(0.0);
         meta.decode_tps = match &timings {
             Some(t) if t["predicted_per_second"].is_number() => t["predicted_per_second"].as_f64().unwrap_or(0.0),
-            _ if decode_s > 0.0 => meta.completion_tokens as f64 / decode_s,
-            _ => 0.0,
+            _ => super::rate(meta.completion_tokens, decode_s),
         };
         meta.prefill_tps = match &timings {
             Some(t) if t["prompt_per_second"].is_number() => t["prompt_per_second"].as_f64().unwrap_or(0.0),
-            _ if ttft.as_secs_f64() > 0.0 => {
-                meta.prompt_tokens.saturating_sub(meta.cached_tokens) as f64 / ttft.as_secs_f64()
-            }
-            _ => 0.0,
+            _ => super::rate(meta.prompt_tokens.saturating_sub(meta.cached_tokens), ttft.as_secs_f64()),
         };
         Ok(Completion { parts, meta, finish_reason: finish, thinking_signature: String::new() })
     }

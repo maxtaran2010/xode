@@ -477,9 +477,14 @@ impl Runtime {
             let used_now = meta.prompt_tokens + meta.completion_tokens;
             self.update_stats(|s| {
                 s.steps += 1;
-                s.tps = meta.decode_tps;
+                // 0 = not measurable this turn (burst delivery): keep the last reading.
+                if meta.decode_tps > 0.0 {
+                    s.tps = meta.decode_tps;
+                }
                 s.ttft_ms = meta.ttft_ms;
-                s.prefill_tps = meta.prefill_tps;
+                if meta.prefill_tps > 0.0 {
+                    s.prefill_tps = meta.prefill_tps;
+                }
                 s.tokens_in = sess.tokens_in;
                 s.tokens_out = sess.tokens_out;
                 if used_now > 0 {

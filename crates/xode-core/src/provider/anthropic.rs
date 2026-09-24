@@ -270,8 +270,8 @@ impl Provider for Anthropic {
             cached_tokens: cached,
             ttft_ms: ttft.as_millis() as u64,
             duration_ms: (end - start).as_millis() as u64,
-            decode_tps: if decode_s > 0.0 { out_tok as f64 / decode_s } else { 0.0 },
-            prefill_tps: if ttft.as_secs_f64() > 0.0 { in_tok.saturating_sub(cached) as f64 / ttft.as_secs_f64() } else { 0.0 },
+            decode_tps: super::rate(out_tok, decode_s),
+            prefill_tps: super::rate(in_tok.saturating_sub(cached), ttft.as_secs_f64()),
             thinking_signature: signature.clone(),
         };
         Ok(Completion { parts, meta, finish_reason: finish, thinking_signature: signature })
