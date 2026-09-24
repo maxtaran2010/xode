@@ -393,7 +393,23 @@ export function createMockBackend(): Backend {
     if (sess && (!sess.title || sess.title === "New chat")) sess.title = userText.slice(0, 60);
 
     type Step = { think?: string; text?: string; calls?: { name: string; args: unknown; result: string; ms: number; ask?: string }[] };
-    const steps: Step[] = [
+    const PLAN_MD = "## Plan: rate-limit the login endpoint\n\n1. Add a fixed-window counter in `crates/xode-core/src/gateway.rs` (per-IP, 5/min).\n2. Return 429 with `Retry-After` when exceeded.\n3. Wire it into the request path in `xode-engine`.\n4. Tests: `gateway::rate_limit_blocks_burst`, `gateway::rate_limit_resets`.";
+    const planning = sessions.find((s) => s.id === sid)?.mode === "plan";
+    const planSteps: Step[] = [
+      {
+        think: "Plan mode: research first, then write the plan. No edits yet.",
+        text: "Let me look at how the login endpoint and gateway are wired before I plan.",
+        calls: [
+          { name: "kb", args: { action: "search", q: "rate limit login brute force" }, result: "g2088 CWE-307 · brute force · 70/70 tok\n  Improper restriction of excessive auth attempts…\ng4102 nginx limit_req · L1-4 · 60/60 tok\n  Fixed-window vs token bucket, Retry-After header…", ms: 41 },
+          { name: "read", args: { path: "crates/xode-core/src/gateway.rs", offset: 180, limit: 40 }, result: READ_RESULT, ms: 15 },
+        ],
+      },
+      {
+        text: "Here is the plan.",
+        calls: [{ name: "plan", args: { text: PLAN_MD }, result: "plan saved: .xode/plans/a1b2c3d4.md (7 lines)", ms: 8 }],
+      },
+    ];
+    const steps: Step[] = planning ? planSteps : [
       {
         think: THINK_1,
         text: "Let me check how the threshold is computed now.",
@@ -472,7 +488,12 @@ export function createMockBackend(): Backend {
         }
         if (results.length) push(sid, mkMsg("tool", results));
       }
-      if (!ctl.cancelled) emit({ type: "goal_check", session: sid, done: true, reason: "tests pass" });
+      if (!ctl.cancelled && planning) {
+        await sleep(300);
+        emit({ type: "plan_ready", session: sid, path: "/work/app/.xode/plans/a1b2c3d4.md", text: PLAN_MD });
+      } else if (!ctl.cancelled) {
+        emit({ type: "goal_check", session: sid, done: true, reason: "tests pass" });
+      }
     } finally {
       clearInterval(ticker);
       st.tps = 0;
@@ -559,9 +580,6 @@ export function createMockBackend(): Backend {
       const s = sessions.find((x) => x.id === sid);
       if (s) s.updated_at = now();
       void run(sid, text);
-      if (s?.mode === "plan") {
-        setTimeout(() => emit({ type: "plan_ready", session: sid, path: "/work/app/.xode/plans/a1b2c3d4.md", text: "## Plan\n1. Add `Session.goal` field in `crates/xode-core/src/store.rs`\n2. Persist it in `save_session`\n3. Show the goal chip in `Composer.tsx`\n4. Tests: `store::goal_roundtrip`" }), 2500);
-      }
     },
     steer: async (sid) => {
       const q = queues.get(sid) ?? [];
@@ -595,6 +613,12 @@ export function createMockBackend(): Backend {
     isRunning: async (sid) => running.has(sid),
     command: async (sid, line) => {
       const [name] = line.slice(1).split(/\s+/);
+      if (name === "build") {
+        const s = sessions.find((x) => x.id === sid);
+        if (s) s.mode = "normal";
+        void run(sid, "Implement the plan in `.xode/plans/a1b2c3d4.md` step by step.");
+        return { type: "done" };
+      }
       if (name === "settings") return { type: "open", panel: "settings" };
       if (name === "context") return { type: "open", panel: "context" };
       if (name === "export") return { type: "export", markdown: "# Export\n", path: "chat.md" };

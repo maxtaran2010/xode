@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-<b>A coding agent built for local models with small context windows.</b> Xode works for hours inside an 80k window. When the window fills up, it compacts itself into a short handoff note and keeps going. It navigates code through a tree-sitter index instead of reading whole files, and it looks things up in a knowledge base that can hold gigabytes of your docs plus everything the agent has learned. It comes as a native desktop app and a terminal UI, and runs equally well on macOS, Windows and Linux — it leans on neither a POSIX shell nor anything Windows-specific.
+<b>A coding agent built for local models with small context windows.</b> Xode works for hours inside an 80k window. When the window fills up, it compacts itself into a short handoff note and keeps going. It navigates code through a tree-sitter index instead of reading whole files, and it looks things up in a knowledge base that can hold gigabytes of your docs plus everything the agent has learned. It comes as a native desktop app and a terminal UI, and runs on macOS, Windows and Linux.
 </p>
 
 <p align="center">
@@ -102,7 +102,7 @@ The prompt is assembled from measured sections: **system**, **tools**, **repo ma
 - **`code` tool:** `map`, `outline`, `find`, `refs`, `read`, and `edit` on a single symbol, over a tree-sitter + Turso index that a file watcher keeps current.
 - **Output filters:**
   - strip ANSI codes, collapse progress bars, merge repeated lines;
-  - per-command filters (git status/diff/log, cargo, npm/pnpm/yarn, pytest, jest/vitest, tsc, eslint, `ls`/`Get-ChildItem`);
+  - per-command filters (git status/diff/log, cargo, npm/pnpm/yarn, pytest, jest/vitest, tsc, eslint, directory listings);
   - keep the head and tail of long output, with the full output saved to a file.
 - **Read limits:** reads return a limited range of lines, and edits return compact diffs.
 - **Goal hook:** after `/goal <text>`, a separate judge call checks each finished turn and sends the agent back to work until the goal is met.
@@ -130,7 +130,7 @@ apps/desktop    Tauri 2 shell + SolidJS UI
 
 **Desktop app.**
 - Codex-style layout: projects and chats on the left, the chat in the middle, a live speedometer (tok/s, TTFT, prefill) on the right.
-- Window blur: Mica/Acrylic on Windows, vibrancy on macOS.
+- Native translucent window blur.
 - Full-screen settings and context view; notifications when the agent needs permission or finishes.
 - Right-click a message to copy it or rewind the chat to that point, optionally restoring files.
 - Clickable links to files the agent creates, such as pages and images.
@@ -163,7 +163,6 @@ Issues and pull requests are welcome: bug reports, filters for more command outp
 4. Keep PRs focused, and describe how you tested them (OS, model, gateway).
 
 House rules:
-- **Cross-platform, no assumptions.** Don't rely on a POSIX shell or anything Windows-specific inside tools; paths shown to the model use `/`.
 - **Every token counts.** Tool schemas and tool outputs must stay compact, and new output goes through the caps and filters.
 - **The engine is the only API.** Frontends talk to `xode-engine`, never directly to the lower crates.
 - **UI:** clean and Codex-like; lucide icons only; no emoji or helper text. Motion is short transform/opacity animations that respect reduced motion.

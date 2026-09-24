@@ -1,11 +1,12 @@
 // Scripted product demo for the README recording (desktop app with XODE_DEMO=1, mock engine).
 import { api, isTauri, setWindowEffect } from "./api";
 import { applyTheme } from "./theme";
-import { newChat, openKnowledge, replyPermission, send, setKbTab, setState, state } from "./store";
+import { answerPlan, newChat, openKnowledge, replyPermission, send, setKbTab, setMode, setState, state } from "./store";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const PROMPT = "Make the compaction trigger respect threshold_tokens and the reserve. Run the core tests after.";
+const PLAN_PROMPT = "Plan how to rate-limit the login endpoint so we can stop brute-force attempts.";
+const BUILD_NOTE = "The agent switches to Normal mode and implements the saved plan.";
 
 async function prepareWindow() {
   if (!isTauri) return;
@@ -38,24 +39,42 @@ function runEnded(sid: () => string | null) {
   });
 }
 
-export async function playReel() {
-  await prepareWindow();
-  setState("ui", { sidebar: true, stats: true, overlay: null });
-  // Auto-approve the permission prompt after a beat, like a user would.
-  api.onEvent((ev) => {
-    if (ev.type === "permission_ask") setTimeout(() => replyPermission(ev.session, ev.req_id, "once"), 1500);
-  });
-  newChat("p-xode");
-  await sleep(2600);
+async function ask(prompt: string) {
   window.dispatchEvent(new CustomEvent("xode:focus-composer"));
-  await type(PROMPT);
+  await type(prompt);
   await sleep(500);
   const done = runEnded(() => state.activeSession);
   setState("ui", "composerText", "");
-  await send(PROMPT, []);
+  await send(prompt, []);
   await done;
+}
+
+export async function playReel() {
+  await prepareWindow();
+  setState("ui", { sidebar: true, stats: true, overlay: null });
+  // Auto-approve permission prompts after a beat, like a user would.
+  api.onEvent((ev) => {
+    if (ev.type === "permission_ask") setTimeout(() => replyPermission(ev.session, ev.req_id, "once"), 1500);
+  });
+
+  newChat("p-xode");
+  await sleep(2400);
+
+  // --- Plan mode: the agent researches and writes a plan, then offers to build it.
+  await setMode("plan");
+  await sleep(900);
+  await ask(PLAN_PROMPT);
+  // The plan card renders; give it a beat to read, then Build.
+  await sleep(3400);
+  const built = runEnded(() => state.activeSession);
+  const plan = [...(state.live[state.activeSession!]?.items ?? [])].reverse().find((i) => i.kind === "plan");
+  if (plan) await answerPlan(state.activeSession!, plan.id, "build");
+  await setMode("normal"); // flip the composer toggle back to Normal for the build
+  void BUILD_NOTE;
+  await built; // implementation run (edits + tests) in Normal mode
   await sleep(2200);
-  // The user compacts by hand.
+
+  // --- Self-compaction, by hand.
   window.dispatchEvent(new CustomEvent("xode:focus-composer"));
   await type("/compact");
   await sleep(450);
@@ -63,19 +82,22 @@ export async function playReel() {
   await send("/compact", []);
   await sleep(2400);
   setState("ui", "overlay", "context");
-  await sleep(3400);
-  setState("ui", "overlay", null);
-  await sleep(700);
-  setState("kb", "note", null);
-  openKnowledge("sources");
-  await sleep(2600);
-  setKbTab("graph");
-  await sleep(5200);
-  setState("kb", "note", "g3");
-  setKbTab("notes");
   await sleep(3200);
   setState("ui", "overlay", null);
-  await sleep(1800);
+  await sleep(700);
+
+  // --- Knowledge base: sources, graph, a note.
+  setState("kb", "note", null);
+  openKnowledge("sources");
+  await sleep(2400);
+  setKbTab("graph");
+  await sleep(5000);
+  setState("kb", "note", "g3");
+  setKbTab("notes");
+  await sleep(3000);
+  setState("ui", "overlay", null);
+  await sleep(1600);
+
   // End of the recording: the recorder stops when the window goes away.
   if (isTauri) (await import("@tauri-apps/api/window")).getCurrentWindow().close();
 }
